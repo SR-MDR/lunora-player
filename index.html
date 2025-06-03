@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunora Player - Multi-Language Video Streaming</title>
+    <link rel="stylesheet" href="css/player.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.14/dist/hls.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <h1>Lunora Player</h1>
+            <div class="header-controls">
+                <button id="fullscreen-toggle" class="control-btn">⛶ Fullscreen</button>
+                <button id="settings-toggle" class="control-btn">⚙️ Settings</button>
+            </div>
+        </header>
+
+        <main class="player-container">
+            <div class="video-wrapper" id="video-wrapper">
+                <video
+                    id="video-player"
+                    controls
+                    preload="metadata"
+                    crossorigin="anonymous">
+                    <p>Your browser doesn't support HTML5 video.</p>
+                </video>
+                
+                <!-- Loading indicator -->
+                <div class="loading-indicator" id="loading-indicator">
+                    <div class="spinner"></div>
+                    <p>Loading stream...</p>
+                </div>
+
+                <!-- Error message -->
+                <div class="error-message" id="error-message" style="display: none;">
+                    <h3>Playback Error</h3>
+                    <p id="error-text"></p>
+                    <button id="retry-btn" class="retry-btn">Retry</button>
+                </div>
+            </div>
+
+            <!-- Language Selection Panel -->
+            <div class="language-panel" id="language-panel" style="display: none;">
+                <div class="panel-content">
+                    <h3>Language Settings</h3>
+                    
+                    <div class="language-section">
+                        <label for="audio-select">Audio Language:</label>
+                        <select id="audio-select" class="language-select">
+                            <option value="">Select Audio Language</option>
+                        </select>
+                    </div>
+
+                    <div class="language-section">
+                        <label for="subtitle-select">Subtitles:</label>
+                        <select id="subtitle-select" class="language-select">
+                            <option value="">No Subtitles</option>
+                        </select>
+                    </div>
+
+                    <div class="panel-actions">
+                        <button id="apply-languages" class="apply-btn">Apply</button>
+                        <button id="close-panel" class="close-btn">Close</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Stream Source Selection -->
+        <section class="source-selection">
+            <h2>Stream Source</h2>
+            <div class="source-options">
+                <div class="source-option">
+                    <label>
+                        <input type="radio" name="source-type" value="live" checked>
+                        Live Stream (AWS MediaLive)
+                    </label>
+                    <input type="url" id="live-url" placeholder="Enter HLS live stream URL"
+                           value="https://dce3793146fef017.mediapackage.us-west-2.amazonaws.com/out/v1/456a13256d454682b4bd708236618057/index.m3u8">
+                </div>
+                
+                <div class="source-option">
+                    <label>
+                        <input type="radio" name="source-type" value="vod">
+                        Video on Demand (S3)
+                    </label>
+                    <input type="url" id="vod-url" placeholder="Enter HLS VOD URL"
+                           value="https://your-cloudfront-domain.cloudfront.net/path/to/video/playlist.m3u8">
+                </div>
+                
+                <div class="source-option">
+                    <label>
+                        <input type="radio" name="source-type" value="test">
+                        Test Stream
+                    </label>
+                    <input type="url" id="test-url" placeholder="Test HLS URL" 
+                           value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">
+                </div>
+            </div>
+            
+            <button id="load-stream" class="load-btn">Load Stream</button>
+        </section>
+
+        <!-- Stream Information -->
+        <section class="stream-info" id="stream-info" style="display: none;">
+            <h3>Stream Information</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Status:</label>
+                    <span id="stream-status">-</span>
+                </div>
+                <div class="info-item">
+                    <label>Quality:</label>
+                    <span id="stream-quality">-</span>
+                </div>
+                <div class="info-item">
+                    <label>Audio Tracks:</label>
+                    <span id="audio-tracks-count">-</span>
+                </div>
+                <div class="info-item">
+                    <label>Subtitle Tracks:</label>
+                    <span id="subtitle-tracks-count">-</span>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Scripts -->
+    <script src="config/player-config.js"></script>
+    <script src="js/language-selector.js"></script>
+    <script src="js/player.js"></script>
+</body>
+</html>

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunora Media Services - AWS Dashboard</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <!-- Chart.js removed - using custom stable chart implementation -->
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <h1>🎥 Lunora Media Services Dashboard</h1>
+            <div class="header-info">
+                <span class="account-info">Account: 372241484305 (Lunora-Media-Services)</span>
+                <span class="region-info">Region: us-west-2</span>
+                <span id="connection-status" style="color: orange;">🔄 Connecting...</span>
+                <button id="refresh-btn" class="refresh-btn">🔄 Refresh</button>
+            </div>
+        </header>
+
+        <!-- Status Overview -->
+        <section class="status-overview">
+            <h2>Service Status Overview</h2>
+            <div class="status-grid">
+                <div class="status-card" id="s3-status">
+                    <div class="status-icon">🗄️</div>
+                    <div class="status-info">
+                        <h3>S3 Storage</h3>
+                        <p class="status-text">Loading...</p>
+                        <p class="status-detail">Checking bucket status...</p>
+                    </div>
+                </div>
+
+                <div class="status-card" id="mediapackage-status">
+                    <div class="status-icon">📦</div>
+                    <div class="status-info">
+                        <h3>MediaPackage</h3>
+                        <p class="status-text">Loading...</p>
+                        <p class="status-detail">Checking channel status...</p>
+                    </div>
+                </div>
+
+                <div class="status-card" id="medialive-status">
+                    <div class="status-icon">📺</div>
+                    <div class="status-info">
+                        <h3>MediaLive</h3>
+                        <p class="status-text">Loading...</p>
+                        <p class="status-detail">Checking MediaLive status...</p>
+                    </div>
+                </div>
+
+                <div class="status-card" id="cloudfront-status">
+                    <div class="status-icon">🌐</div>
+                    <div class="status-info">
+                        <h3>CloudFront</h3>
+                        <p class="status-text">Loading...</p>
+                        <p class="status-detail">Checking CloudFront status...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Resource Details -->
+        <section class="resource-details">
+            <h2>Resource Details</h2>
+            
+            <!-- MediaPackage Details -->
+            <div class="resource-card">
+                <h3>📦 MediaPackage Channel</h3>
+                <div class="resource-info">
+                    <div class="info-row">
+                        <label>Channel ID:</label>
+                        <span id="mp-channel-id">Loading...</span>
+                    </div>
+                    <div class="info-row">
+                        <label>HLS Endpoint:</label>
+                        <span id="mp-hls-endpoint" class="endpoint-url">Loading...</span>
+                        <button class="copy-btn" onclick="copyToClipboard('mp-hls-endpoint')">📋</button>
+                    </div>
+                    <div class="info-row">
+                        <label>Status:</label>
+                        <span id="mp-status" class="status-active">Loading...</span>
+                    </div>
+                    <div class="info-row">
+                        <label>Created:</label>
+                        <span id="mp-created">Loading...</span>
+                    </div>
+                </div>
+                <div class="resource-actions">
+                    <button class="action-btn" onclick="testEndpoint('mp-hls-endpoint')">🧪 Test Endpoint</button>
+                    <button class="action-btn" onclick="openInPlayer('mp-hls-endpoint')">▶️ Open in Player</button>
+                </div>
+            </div>
+
+            <!-- S3 Bucket Details -->
+            <div class="resource-card">
+                <h3>🗄️ S3 Storage</h3>
+                <div class="resource-info">
+                    <div class="info-row">
+                        <label>Bucket Name:</label>
+                        <span id="s3-bucket-name">Loading...</span>
+                    </div>
+                    <div class="info-row">
+                        <label>Region:</label>
+                        <span id="s3-region">us-west-2</span>
+                    </div>
+                    <div class="info-row">
+                        <label>Storage Used:</label>
+                        <span id="s3-storage">Loading...</span>
+                    </div>
+                    <div class="info-row">
+                        <label>Objects:</label>
+                        <span id="s3-objects">Loading...</span>
+                    </div>
+                </div>
+                <div class="resource-actions">
+                    <button class="action-btn" onclick="openS3Console()">🔗 Open S3 Console</button>
+                    <button class="action-btn" onclick="refreshS3Stats()">🔄 Refresh Stats</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Cost Monitoring -->
+        <section class="cost-monitoring">
+            <h2>💰 Cost Monitoring</h2>
+            <div class="cost-grid">
+                <div class="cost-card">
+                    <h3>Current Month Estimate</h3>
+                    <div class="cost-amount" id="current-cost">$0.00</div>
+                    <p class="cost-detail">Based on current usage</p>
+                </div>
+                <div class="cost-card">
+                    <h3>MediaPackage</h3>
+                    <div class="cost-amount" id="mediapackage-cost">$0.00</div>
+                    <p class="cost-detail">Per GB processed</p>
+                </div>
+                <div class="cost-card">
+                    <h3>S3 Storage</h3>
+                    <div class="cost-amount" id="s3-cost">$0.00</div>
+                    <p class="cost-detail">Storage + requests</p>
+                </div>
+                <div class="cost-card">
+                    <h3>Data Transfer</h3>
+                    <div class="cost-amount" id="transfer-cost">$0.00</div>
+                    <p class="cost-detail">CloudFront + egress</p>
+                </div>
+            </div>
+            
+            <div class="cost-chart-container">
+                <h3>Current Day Cost</h3>
+                <canvas id="costChart" width="400" height="200"></canvas>
+                <p class="cost-detail" style="text-align: center; margin-top: 10px; color: #6c757d;">
+                    Real-time cost estimate based on current usage<br>
+                    <small>Fixed scale: $0.00 - $2.00 (no dynamic scaling)</small>
+                </p>
+            </div>
+        </section>
+
+        <!-- Performance Metrics -->
+        <section class="performance-metrics">
+            <h2>📊 Performance Metrics</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <h3>MediaPackage Requests</h3>
+                    <div class="metric-value" id="mp-requests">0</div>
+                    <p class="metric-period">Last 24 hours</p>
+                </div>
+                <div class="metric-card">
+                    <h3>Data Processed</h3>
+                    <div class="metric-value" id="mp-data">0 GB</div>
+                    <p class="metric-period">Last 24 hours</p>
+                </div>
+                <div class="metric-card">
+                    <h3>Error Rate</h3>
+                    <div class="metric-value" id="error-rate">0%</div>
+                    <p class="metric-period">Last 24 hours</p>
+                </div>
+                <div class="metric-card">
+                    <h3>Avg Latency</h3>
+                    <div class="metric-value" id="avg-latency">0ms</div>
+                    <p class="metric-period">Last 24 hours</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Quick Actions -->
+        <section class="quick-actions">
+            <h2>⚡ Quick Actions</h2>
+            <div class="actions-grid">
+                <button class="action-card" onclick="createMediaLiveChannel()">
+                    <div class="action-icon">📺</div>
+                    <div class="action-text">
+                        <h3>Create MediaLive Channel</h3>
+                        <p>Set up live streaming with SRT input</p>
+                    </div>
+                </button>
+                
+                <button class="action-card" onclick="createCloudFront()">
+                    <div class="action-icon">🌐</div>
+                    <div class="action-text">
+                        <h3>Create CloudFront Distribution</h3>
+                        <p>Add global CDN for better performance</p>
+                    </div>
+                </button>
+                
+                <button class="action-card" onclick="openPlayer()">
+                    <div class="action-icon">▶️</div>
+                    <div class="action-text">
+                        <h3>Open Video Player</h3>
+                        <p>Test streaming with the Lunora Player</p>
+                    </div>
+                </button>
+                
+                <button class="action-card" onclick="openCloudWatch()">
+                    <div class="action-icon">📈</div>
+                    <div class="action-text">
+                        <h3>CloudWatch Metrics</h3>
+                        <p>View detailed AWS monitoring</p>
+                    </div>
+                </button>
+            </div>
+        </section>
+
+        <!-- Alerts and Notifications -->
+        <section class="alerts-section">
+            <h2>🚨 Alerts & Notifications</h2>
+            <div id="alerts-container">
+                <div class="alert alert-info">
+                    <span class="alert-icon">ℹ️</span>
+                    <div class="alert-content">
+                        <h4>MediaPackage Channel Active</h4>
+                        <p>Your MediaPackage channel is ready to receive streams. No active ingestion detected.</p>
+                        <small>Just now</small>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Scripts -->
+    <script src="config/aws-config.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "name": "lunora-player",
+  "version": "1.0.0",
+  "description": "Multi-language video player with AWS Media Services integration",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx http-server . -p 8080 -c-1",
+    "dashboard": "npx http-server . -p 8081 -c-1 -o dashboard.html",
+    "backend": "node backend/server.js",
+    "backend-dev": "nodemon backend/server.js",
+    "start": "concurrently \"AWS_PROFILE=lunora-media AWS_SDK_LOAD_CONFIG=1 npm run backend\" \"npm run dashboard\"",
+    "build": "echo 'Build process for production'",
+    "deploy-aws": "bash scripts/deploy-aws.sh",
+    "test": "echo 'Tests will be added'"
+  },
+  "dependencies": {
+    "hls.js": "^1.4.14",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "aws-sdk": "^2.1490.0"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "nodemon": "^3.0.1",
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "video-player",
+    "hls",
+    "aws-media-services",
+    "multi-language",
+    "streaming"
+  ],
+  "author": "Lunora Player Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "."
+  }
+}

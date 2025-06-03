@@ -1,0 +1,300 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lunora Player - AWS Media Services Infrastructure for HLS Streaming'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'lunora-player'
+    Description: 'Name of the project for resource naming'
+  
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+  
+  VideoBucketName:
+    Type: String
+    Default: 'lunora-media-videos'
+    Description: 'S3 bucket name for video storage'
+  
+  SRTInputPort:
+    Type: Number
+    Default: 9998
+    Description: 'Port for SRT input from Videon Edge nodes'
+
+Resources:
+  # S3 Bucket for Video Storage
+  VideoBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${VideoBucketName}-${Environment}-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, HEAD]
+            AllowedOrigins: ['*']
+            MaxAge: 3600
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+
+  # CloudFront Origin Access Control
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${ProjectName}-${Environment}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # CloudFront Distribution
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub '${ProjectName} ${Environment} - Video Distribution'
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # CORS-S3Origin
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03  # SecurityHeadersPolicy
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt VideoBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+        Enabled: true
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+
+  # S3 Bucket Policy for CloudFront
+  VideoBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref VideoBucket
+      PolicyDocument:
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${VideoBucket}/*'
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
+
+  # MediaLive Input Security Group
+  MediaLiveInputSecurityGroup:
+    Type: AWS::MediaLive::InputSecurityGroup
+    Properties:
+      WhitelistRules:
+        - Cidr: '0.0.0.0/0'  # Allow from anywhere - restrict this in production
+      Tags:
+        Name: !Sub '${ProjectName}-${Environment}-input-sg'
+
+  # MediaLive SRT Input
+  MediaLiveSRTInput:
+    Type: AWS::MediaLive::Input
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-srt-input'
+      Type: SRT_CALLER
+      InputSecurityGroups:
+        - !Ref MediaLiveInputSecurityGroup
+      Destinations:
+        - StreamName: !Sub '${ProjectName}-srt-stream'
+      Tags:
+        Name: !Sub '${ProjectName}-${Environment}-srt-input'
+
+  # MediaPackage Channel
+  MediaPackageChannel:
+    Type: AWS::MediaPackage::Channel
+    Properties:
+      Id: !Sub '${ProjectName}-${Environment}-channel'
+      Description: !Sub '${ProjectName} ${Environment} HLS Channel'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-channel'
+
+  # MediaPackage HLS Origin Endpoint
+  MediaPackageHLSEndpoint:
+    Type: AWS::MediaPackage::OriginEndpoint
+    Properties:
+      Id: !Sub '${ProjectName}-${Environment}-hls'
+      ChannelId: !Ref MediaPackageChannel
+      Description: 'HLS Origin Endpoint'
+      HlsPackage:
+        SegmentDurationSeconds: 6
+        PlaylistWindowSeconds: 60
+        PlaylistType: EVENT
+        AdMarkers: NONE
+        IncludeIframeOnlyStream: false
+        ProgramDateTimeIntervalSeconds: 0
+        UseAudioRenditionGroup: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-hls-endpoint'
+
+  # IAM Role for MediaLive
+  MediaLiveRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-medialive-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: medialive.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: MediaPackageAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - mediapackage:*
+                Resource: '*'
+
+  # MediaLive Channel
+  MediaLiveChannel:
+    Type: AWS::MediaLive::Channel
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-channel'
+      ChannelClass: SINGLE_PIPELINE
+      RoleArn: !GetAtt MediaLiveRole.Arn
+      InputSpecification:
+        Codec: AVC
+        Resolution: HD
+        MaximumBitrate: MAX_10_MBPS
+      InputAttachments:
+        - InputAttachmentName: !Sub '${ProjectName}-srt-attachment'
+          InputId: !Ref MediaLiveSRTInput
+      Destinations:
+        - Id: mediapackage-destination
+          MediaPackageSettings:
+            - ChannelId: !Ref MediaPackageChannel
+      EncoderSettings:
+        TimecodeConfig:
+          Source: EMBEDDED
+        AudioDescriptions:
+          - AudioSelectorName: default
+            AudioTypeControl: FOLLOW_INPUT
+            LanguageCodeControl: FOLLOW_INPUT
+            Name: audio_1_aac
+            CodecSettings:
+              AacSettings:
+                Bitrate: 128000
+                CodingMode: CODING_MODE_2_0
+                InputType: NORMAL
+                Profile: LC
+                RateControlMode: CBR
+                RawFormat: NONE
+                SampleRate: 48000
+                Spec: MPEG4
+        VideoDescriptions:
+          - Name: video_1080p30
+            CodecSettings:
+              H264Settings:
+                AdaptiveQuantization: HIGH
+                AfdSignaling: NONE
+                ColorMetadata: INSERT
+                EntropyEncoding: CABAC
+                FlickerAq: ENABLED
+                FramerateControl: SPECIFIED
+                FramerateNumerator: 30
+                FramerateDenominator: 1
+                GopBReference: DISABLED
+                GopClosedCadence: 1
+                GopNumBFrames: 2
+                GopSize: 60
+                GopSizeUnits: FRAMES
+                Level: H264_LEVEL_4_1
+                LookAheadRateControl: HIGH
+                MaxBitrate: 5000000
+                MinIInterval: 0
+                NumRefFrames: 3
+                ParControl: SPECIFIED
+                ParNumerator: 1
+                ParDenominator: 1
+                Profile: HIGH
+                QualityLevel: STANDARD_QUALITY
+                QvbrQualityLevel: 8
+                RateControlMode: QVBR
+                ScanType: PROGRESSIVE
+                SceneChangeDetect: ENABLED
+                Slices: 1
+                SpatialAq: ENABLED
+                SubgopLength: DYNAMIC
+                Syntax: DEFAULT
+                TemporalAq: ENABLED
+                TimecodeInsertion: DISABLED
+            Height: 1080
+            Width: 1920
+            RespondToAfd: NONE
+            ScalingBehavior: DEFAULT
+            Sharpness: 50
+        OutputGroups:
+          - Name: MediaPackage
+            OutputGroupSettings:
+              MediaPackageGroupSettings:
+                Destination:
+                  DestinationRefId: mediapackage-destination
+            Outputs:
+              - OutputName: 1080p30
+                VideoDescriptionName: video_1080p30
+                AudioDescriptionNames:
+                  - audio_1_aac
+                OutputSettings:
+                  MediaPackageOutputSettings: {}
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-channel'
+
+Outputs:
+  VideoBucketName:
+    Description: 'S3 bucket name for video storage'
+    Value: !Ref VideoBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-VideoBucket'
+
+  CloudFrontDomainName:
+    Description: 'CloudFront distribution domain name'
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-CloudFrontDomain'
+
+  MediaPackageHLSEndpointUrl:
+    Description: 'MediaPackage HLS endpoint URL'
+    Value: !GetAtt MediaPackageHLSEndpoint.Url
+    Export:
+      Name: !Sub '${AWS::StackName}-HLSEndpoint'
+
+  MediaLiveChannelId:
+    Description: 'MediaLive channel ID'
+    Value: !Ref MediaLiveChannel
+    Export:
+      Name: !Sub '${AWS::StackName}-MediaLiveChannel'
+
+  SRTInputEndpoint:
+    Description: 'SRT input endpoint for Videon Edge nodes'
+    Value: !Sub '${MediaLiveSRTInput}.amazonaws.com:${SRTInputPort}'
+    Export:
+      Name: !Sub '${AWS::StackName}-SRTEndpoint'
