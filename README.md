@@ -1,5 +1,11 @@
 # Lunora Player
 
+[![GitHub](https://img.shields.io/github/license/SR-MDR/lunora-player)](https://github.com/SR-MDR/lunora-player/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/SR-MDR/lunora-player)](https://github.com/SR-MDR/lunora-player/stargazers)
+[![GitHub issues](https://img.shields.io/github/issues/SR-MDR/lunora-player)](https://github.com/SR-MDR/lunora-player/issues)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![AWS](https://img.shields.io/badge/AWS-Media%20Services-orange.svg)](https://aws.amazon.com/media-services/)
+
 A modern, browser-based video player with multi-language support and AWS Media Services integration for HLS streaming.
 
 ## Features
