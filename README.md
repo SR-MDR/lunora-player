@@ -89,6 +89,7 @@ npm run dashboard  # Dashboard on port 8081
 - **Real-time Dashboard**: `http://localhost:8081/dashboard.html`
 - **Backend API**: `http://localhost:3000/api/health`
 - **Video Player**: `http://localhost:8080`
+- **Videon Test Page**: `http://localhost:8082/videon-test.html`
 
 ## Architecture
 
@@ -191,6 +192,31 @@ lunora-player/
 
 ## Videon Edge Integration
 
+### Connectivity Testing
+Before configuring streaming, test connectivity between your Videon Edge node and the Lunora Player backend:
+
+```bash
+# Test connectivity using the command-line script
+./scripts/test-videon-connectivity.sh all
+
+# Or test individual components
+./scripts/test-videon-connectivity.sh basic    # Basic GET test
+./scripts/test-videon-connectivity.sh post     # POST data test
+./scripts/test-videon-connectivity.sh status   # Stream status check
+```
+
+**Web-based Testing:**
+- Open `http://localhost:8082/videon-test.html` for interactive testing
+- Test GET/POST requests directly from your browser
+- View real-time responses and status
+
+### API Endpoints for Videon Edge Nodes
+Your Videon Edge node can use these endpoints for monitoring and testing:
+
+- **GET** `http://localhost:3000/api/videon/test` - Basic connectivity test
+- **POST** `http://localhost:3000/api/videon/test` - Data transmission test
+- **GET** `http://localhost:3000/api/videon/stream-status` - Stream infrastructure status
+
 ### SRT Configuration
 1. Configure your Videon Edge node with the SRT output settings:
    - **Protocol**: SRT Caller
@@ -200,6 +226,14 @@ lunora-player/
 
 2. Start streaming from your Videon Edge node
 3. Monitor the MediaLive channel for incoming stream
+
+### HTTP Monitoring (Optional)
+Configure your Videon Edge node to periodically check connectivity:
+- **URL**: `http://localhost:3000/api/videon/test`
+- **Method**: GET or POST
+- **Interval**: 60 seconds
+- **Timeout**: 10 seconds
+- **User-Agent**: `Videon-Edge/[firmware-version]`
 
 ### Multiple Edge Nodes
 The system supports multiple Videon Edge nodes for redundancy:

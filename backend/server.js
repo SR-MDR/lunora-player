@@ -317,13 +317,138 @@ app.get('/api/dashboard', async (req, res) => {
             fetch(`http://localhost:${PORT}/api/medialive/status`).then(r => r.json()),
             fetch(`http://localhost:${PORT}/api/cloudfront/status`).then(r => r.json())
         ]);
-        
+
         res.json({
             timestamp: new Date().toISOString(),
             s3: s3Response.status === 'fulfilled' ? s3Response.value : { error: s3Response.reason },
             mediaPackage: mpResponse.status === 'fulfilled' ? mpResponse.value : { error: mpResponse.reason },
             mediaLive: mlResponse.status === 'fulfilled' ? mlResponse.value : { error: mlResponse.reason },
             cloudFront: cfResponse.status === 'fulfilled' ? cfResponse.value : { error: cfResponse.reason }
+        });
+    } catch (error) {
+        handleAWSError(error, res);
+    }
+});
+
+// Videon Edge Node Testing Endpoints
+app.get('/api/videon/test', (req, res) => {
+    const timestamp = new Date().toISOString();
+    const clientIP = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'];
+
+    console.log(`Videon test request from ${clientIP} at ${timestamp}`);
+
+    res.json({
+        status: 'success',
+        message: 'Videon Edge Node connectivity test successful',
+        timestamp: timestamp,
+        server: {
+            name: 'Lunora Player Backend',
+            version: '1.0.0',
+            region: CONFIG.region,
+            account: CONFIG.accountId
+        },
+        client: {
+            ip: clientIP,
+            userAgent: req.headers['user-agent'] || 'Unknown'
+        },
+        endpoints: {
+            health: `http://localhost:${PORT}/api/health`,
+            mediapackage: `http://localhost:${PORT}/api/mediapackage/status`,
+            medialive: `http://localhost:${PORT}/api/medialive/status`,
+            dashboard: `http://localhost:8081/dashboard.html`
+        }
+    });
+});
+
+app.post('/api/videon/test', (req, res) => {
+    const timestamp = new Date().toISOString();
+    const clientIP = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'];
+    const payload = req.body;
+
+    console.log(`Videon POST test from ${clientIP} at ${timestamp}:`, payload);
+
+    res.json({
+        status: 'success',
+        message: 'Videon Edge Node POST test successful',
+        timestamp: timestamp,
+        received: payload,
+        client: {
+            ip: clientIP,
+            userAgent: req.headers['user-agent'] || 'Unknown'
+        },
+        echo: {
+            ...payload,
+            serverProcessedAt: timestamp
+        }
+    });
+});
+
+// Videon Edge Node stream status endpoint
+app.get('/api/videon/stream-status', async (req, res) => {
+    try {
+        // Check MediaLive channels for active streams
+        const channels = await mediaLive.listChannels().promise();
+        const activeChannels = [];
+
+        for (const channel of channels.Channels) {
+            if (channel.State === 'RUNNING') {
+                try {
+                    const details = await mediaLive.describeChannel({
+                        ChannelId: channel.Id
+                    }).promise();
+
+                    activeChannels.push({
+                        id: channel.Id,
+                        name: channel.Name,
+                        state: channel.State,
+                        inputAttachments: details.InputAttachments?.length || 0,
+                        destinations: details.Destinations?.length || 0
+                    });
+                } catch (err) {
+                    console.error(`Error getting details for channel ${channel.Id}:`, err.message);
+                }
+            }
+        }
+
+        // Check MediaPackage for active streams
+        const mpChannel = await mediaPackage.describeChannel({
+            Id: CONFIG.mediaPackageChannel
+        }).promise();
+
+        const endpoints = await mediaPackage.listOriginEndpoints({
+            ChannelId: CONFIG.mediaPackageChannel
+        }).promise();
+
+        res.json({
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            streaming: {
+                mediaLive: {
+                    totalChannels: channels.Channels.length,
+                    activeChannels: activeChannels.length,
+                    channels: activeChannels
+                },
+                mediaPackage: {
+                    channel: {
+                        id: mpChannel.Id,
+                        status: 'active'
+                    },
+                    endpoints: endpoints.OriginEndpoints.map(ep => ({
+                        id: ep.Id,
+                        url: ep.Url,
+                        type: ep.HlsPackage ? 'HLS' : ep.DashPackage ? 'DASH' : 'Unknown'
+                    }))
+                }
+            },
+            recommendations: activeChannels.length === 0 ? [
+                'No active MediaLive channels found',
+                'Create and start a MediaLive channel to receive SRT streams',
+                'Configure Videon Edge node to send SRT to MediaLive input'
+            ] : [
+                'MediaLive channels are active and ready',
+                'Configure Videon Edge node SRT output to MediaLive input',
+                'Monitor stream health via dashboard'
+            ]
         });
     } catch (error) {
         handleAWSError(error, res);
