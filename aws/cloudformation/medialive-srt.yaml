@@ -1,0 +1,337 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lunora Player - MediaLive with SRT Input for LiveEdge Node Integration'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'lunora-player'
+    Description: 'Name of the project for resource naming'
+  
+  Environment:
+    Type: String
+    Default: 'prod'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+  
+  MediaPackageChannelId:
+    Type: String
+    Default: 'lunora-player-dev-channel'
+    Description: 'Existing MediaPackage channel ID to send output to'
+  
+  SRTInputPort:
+    Type: Number
+    Default: 9998
+    Description: 'Port for SRT input from LiveEdge Node'
+    MinValue: 1024
+    MaxValue: 65535
+
+Resources:
+  # Security Group for MediaLive
+  MediaLiveSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub '${ProjectName}-${Environment}-medialive-sg'
+      GroupDescription: 'Security group for MediaLive SRT input'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: udp
+          FromPort: !Ref SRTInputPort
+          ToPort: !Ref SRTInputPort
+          CidrIp: 0.0.0.0/0
+          Description: 'SRT input from LiveEdge Node'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-medialive-sg'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # VPC for MediaLive (required for SRT input)
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-vpc'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Public Subnet for MediaLive
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-public-subnet-1'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Second Public Subnet for MediaLive (required for redundancy)
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-public-subnet-2'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-igw'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Attach Internet Gateway to VPC
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  # Route Table for Public Subnets
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-public-rt'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Default Route to Internet Gateway
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Associate Route Table with Public Subnets
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  # IAM Role for MediaLive
+  MediaLiveRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-medialive-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: medialive.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: MediaPackageAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - mediapackage:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource: '*'
+
+  # MediaLive SRT Input
+  MediaLiveSRTInput:
+    Type: AWS::MediaLive::Input
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-srt-input'
+      Type: SRT_CALLER
+      InputSecurityGroups:
+        - !Ref MediaLiveInputSecurityGroup
+      Destinations:
+        - StreamName: !Sub '${ProjectName}-${Environment}-srt-stream'
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+
+  # Input Security Group for MediaLive
+  MediaLiveInputSecurityGroup:
+    Type: AWS::MediaLive::InputSecurityGroup
+    Properties:
+      WhitelistRules:
+        - Cidr: 0.0.0.0/0  # Allow from anywhere - restrict this in production
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+
+  # MediaLive Channel
+  MediaLiveChannel:
+    Type: AWS::MediaLive::Channel
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-channel'
+      ChannelClass: SINGLE_PIPELINE
+      RoleArn: !GetAtt MediaLiveRole.Arn
+      InputAttachments:
+        - InputAttachmentName: !Sub '${ProjectName}-srt-input'
+          InputId: !Ref MediaLiveSRTInput
+          InputSettings:
+            AudioSelectors:
+              - Name: 'Default'
+                SelectorSettings:
+                  AudioTrackSelection:
+                    Tracks:
+                      - Track: 1
+            VideoSelector:
+              ColorSpace: REC_709
+              ColorSpaceUsage: FORCE
+            SourceEndBehavior: CONTINUE
+      Destinations:
+        - Id: 'mediapackage'
+          MediaPackageSettings:
+            ChannelId: !Ref MediaPackageChannelId
+      EncoderSettings:
+        TimecodeConfig:
+          Source: EMBEDDED
+        AudioDescriptions:
+          - AudioSelectorName: 'Default'
+            AudioTypeControl: FOLLOW_INPUT
+            CodecSettings:
+              AacSettings:
+                Bitrate: 96000
+                CodingMode: CODING_MODE_2_0
+                InputType: NORMAL
+                Profile: LC
+                RateControlMode: CBR
+                RawFormat: NONE
+                SampleRate: 48000
+                Spec: MPEG4
+            LanguageCodeControl: FOLLOW_INPUT
+            Name: 'audio_1'
+        VideoDescriptions:
+          - CodecSettings:
+              H264Settings:
+                AdaptiveQuantization: HIGH
+                AfdSignaling: NONE
+                Bitrate: 2000000
+                ColorMetadata: INSERT
+                EntropyEncoding: CABAC
+                FlickerAq: ENABLED
+                FramerateControl: SPECIFIED
+                FramerateNumerator: 30
+                FramerateDenominator: 1
+                GopBReference: DISABLED
+                GopClosedCadence: 1
+                GopNumBFrames: 2
+                GopSize: 90
+                GopSizeUnits: FRAMES
+                Level: H264_LEVEL_AUTO
+                LookAheadRateControl: MEDIUM
+                MaxBitrate: 2000000
+                NumRefFrames: 3
+                ParControl: SPECIFIED
+                ParNumerator: 1
+                ParDenominator: 1
+                Profile: HIGH
+                QualityLevel: STANDARD_QUALITY
+                QvbrQualityLevel: 8
+                RateControlMode: CBR
+                ScanType: PROGRESSIVE
+                SceneChangeDetect: ENABLED
+                Slices: 1
+                SpatialAq: ENABLED
+                SubgopLength: FIXED
+                Syntax: DEFAULT
+                TemporalAq: ENABLED
+                TimecodeInsertion: DISABLED
+            Height: 720
+            Name: 'video_720p30'
+            RespondToAfd: NONE
+            ScalingBehavior: DEFAULT
+            Sharpness: 50
+            Width: 1280
+        OutputGroups:
+          - Name: 'MediaPackage'
+            OutputGroupSettings:
+              MediaPackageGroupSettings:
+                Destination:
+                  DestinationRefId: 'mediapackage'
+            Outputs:
+              - AudioDescriptionNames:
+                  - 'audio_1'
+                OutputName: 'output_720p30'
+                OutputSettings:
+                  MediaPackageOutputSettings: {}
+                VideoDescriptionName: 'video_720p30'
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+
+Outputs:
+  MediaLiveChannelId:
+    Description: 'MediaLive Channel ID'
+    Value: !Ref MediaLiveChannel
+    Export:
+      Name: !Sub '${AWS::StackName}-MediaLiveChannelId'
+
+  SRTInputId:
+    Description: 'MediaLive SRT Input ID'
+    Value: !Ref MediaLiveSRTInput
+    Export:
+      Name: !Sub '${AWS::StackName}-SRTInputId'
+
+  SRTInputURL:
+    Description: 'SRT Input URL for LiveEdge Node configuration'
+    Value: !Sub 'srt://${MediaLiveSRTInput}.medialive.${AWS::Region}.amazonaws.com:${SRTInputPort}'
+    Export:
+      Name: !Sub '${AWS::StackName}-SRTInputURL'
+
+  VPCId:
+    Description: 'VPC ID for MediaLive'
+    Value: !Ref VPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VPCId'
+
+  SecurityGroupId:
+    Description: 'Security Group ID for MediaLive'
+    Value: !Ref MediaLiveSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-SecurityGroupId'

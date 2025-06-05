@@ -36,6 +36,8 @@ A modern, browser-based video player with multi-language support and AWS Media S
 - Node.js (for development server)
 - AWS CLI configured with access to Lunora-Media-Services account (372241484305)
 - AWS account with Media Services enabled in us-west-2 region
+- Domain name for production deployment
+- jq (JSON processor) for scripts
 
 ### 1. Install Dependencies
 ```bash
@@ -52,13 +54,39 @@ aws configure --profile lunora-media
 export AWS_PROFILE=lunora-media
 ```
 
-### 3. Deploy AWS Infrastructure
+### 3. Development Setup
 ```bash
-# Deploy the AWS Media Services stack
+# Deploy the AWS Media Services stack for development
 ./scripts/deploy-aws.sh deploy
 
 # Start the MediaLive channel (this will incur AWS charges)
 ./scripts/deploy-aws.sh start-channel
+```
+
+### 4. Production Deployment
+
+#### 4.1 Set Up Domain and SSL Certificate
+```bash
+# Set up domain and SSL certificate
+./scripts/setup-domain-ssl.sh \
+    --domain yourdomain.com \
+    --create-zone \
+    --create-cert \
+    --auto-validate
+```
+
+#### 4.2 Deploy to Production
+```bash
+# Deploy complete production stack with SRT ingest
+./scripts/deploy-production-srt.sh \
+    --domain yourdomain.com \
+    --certificate "arn:aws:acm:us-east-1:123456789012:certificate/your-cert-id"
+```
+
+#### 4.3 Test Production Deployment
+```bash
+# Test complete SRT pipeline
+./scripts/test-production-srt.sh --domain yourdomain.com
 ```
 
 ### 4. Start Development Server
@@ -89,7 +117,6 @@ npm run dashboard  # Dashboard on port 8081
 - **Real-time Dashboard**: `http://localhost:8081/dashboard.html`
 - **Backend API**: `http://localhost:3000/api/health`
 - **Video Player**: `http://localhost:8080`
-- **Videon Test Page**: `http://localhost:8082/videon-test.html`
 
 ## Architecture
 
@@ -163,19 +190,22 @@ The player includes several test streams for development and testing.
 ```
 lunora-player/
 ├── index.html              # Main player page
+├── dashboard.html          # AWS services dashboard
 ├── css/
-│   └── player.css          # Player styles
+│   ├── player.css          # Player styles
+│   └── dashboard.css       # Dashboard styles
 ├── js/
 │   ├── player.js           # Main player logic
-│   └── language-selector.js # Language selection
+│   ├── language-selector.js # Language selection
+│   └── dashboard.js        # Dashboard functionality
 ├── config/
 │   ├── player-config.js    # Player configuration
 │   └── aws-config.js       # AWS configuration (auto-generated)
+├── backend/
+│   └── server.js           # Express API server
 ├── aws/
-│   └── cloudformation/
-│       └── media-services.yaml # AWS infrastructure
-├── scripts/
-│   └── deploy-aws.sh       # Deployment script
+│   └── cloudformation/     # AWS infrastructure templates
+├── scripts/                # Deployment and utility scripts
 └── docs/                   # Documentation
 ```
 
@@ -206,9 +236,9 @@ Before configuring streaming, test connectivity between your Videon Edge node an
 ```
 
 **Web-based Testing:**
-- Open `http://localhost:8082/videon-test.html` for interactive testing
-- Test GET/POST requests directly from your browser
-- View real-time responses and status
+- Use the command-line scripts for comprehensive testing
+- Monitor via the dashboard at `http://localhost:8081/dashboard.html`
+- Check backend API health at `http://localhost:3000/api/health`
 
 ### API Endpoints for Videon Edge Nodes
 Your Videon Edge node can use these endpoints for monitoring and testing:

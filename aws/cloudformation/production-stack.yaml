@@ -1,0 +1,365 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lunora Player - Production Infrastructure Stack'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'lunora-player'
+    Description: 'Name of the project for resource naming'
+  
+  Environment:
+    Type: String
+    Default: 'prod'
+    AllowedValues: ['prod', 'staging']
+    Description: 'Environment name'
+  
+  DomainName:
+    Type: String
+    Description: 'Domain name for the application (e.g., yourdomain.com)'
+    Default: 'example.com'
+  
+  CertificateArn:
+    Type: String
+    Description: 'ARN of the SSL certificate in ACM (must be in us-east-1 for CloudFront)'
+    Default: ''
+
+Conditions:
+  HasCustomDomain: !Not [!Equals [!Ref DomainName, 'example.com']]
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, '']]
+  UseCustomSSL: !And [!Condition HasCustomDomain, !Condition HasCertificate]
+
+Resources:
+  # S3 Buckets for Frontend Applications
+  PlayerBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-player-${Environment}-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  DashboardBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-dashboard-${Environment}-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  VideonTestBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-videon-${Environment}-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # Origin Access Control for CloudFront
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${ProjectName}-${Environment}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # CloudFront Distribution for Player App
+  PlayerCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub '${ProjectName} ${Environment} - Player Application'
+        Aliases: !If
+          - HasCustomDomain
+          - [!Sub 'player.${DomainName}']
+          - !Ref 'AWS::NoValue'
+        ViewerCertificate: !If
+          - UseCustomSSL
+          - AcmCertificateArn: !Ref CertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        DefaultCacheBehavior:
+          TargetOriginId: PlayerS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # CORS-S3Origin
+        Origins:
+          - Id: PlayerS3Origin
+            DomainName: !GetAtt PlayerBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+        DefaultRootObject: index.html
+        CustomErrorResponses:
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        Enabled: true
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+
+  # CloudFront Distribution for Dashboard
+  DashboardCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub '${ProjectName} ${Environment} - Dashboard Application'
+        Aliases: !If
+          - HasCustomDomain
+          - [!Sub 'dashboard.${DomainName}']
+          - !Ref 'AWS::NoValue'
+        ViewerCertificate: !If
+          - UseCustomSSL
+          - AcmCertificateArn: !Ref CertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        DefaultCacheBehavior:
+          TargetOriginId: DashboardS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # CORS-S3Origin
+        Origins:
+          - Id: DashboardS3Origin
+            DomainName: !GetAtt DashboardBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+        DefaultRootObject: dashboard.html
+        Enabled: true
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+
+  # S3 Bucket Policies
+  PlayerBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PlayerBucket
+      PolicyDocument:
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${PlayerBucket}/*'
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${PlayerCloudFrontDistribution}'
+
+  DashboardBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DashboardBucket
+      PolicyDocument:
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${DashboardBucket}/*'
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${DashboardCloudFrontDistribution}'
+
+  # API Gateway for Backend
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-api'
+      Description: !Sub '${ProjectName} ${Environment} Backend API'
+      EndpointConfiguration:
+        Types: [REGIONAL]
+
+  # Lambda Execution Role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-lambda-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Policies:
+        - PolicyName: MediaServicesAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - mediapackage:Describe*
+                  - mediapackage:List*
+                  - medialive:Describe*
+                  - medialive:List*
+                  - cloudfront:List*
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - cloudwatch:GetMetricStatistics
+                Resource: '*'
+
+  # Lambda Functions
+  HealthCheckFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-health'
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          NODE_ENV: !Ref Environment
+          AWS_ACCOUNT_ID: !Ref AWS::AccountId
+          REGION: !Ref AWS::Region
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            return {
+              statusCode: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+              },
+              body: JSON.stringify({
+                status: 'healthy',
+                timestamp: new Date().toISOString(),
+                environment: process.env.NODE_ENV,
+                region: process.env.AWS_REGION,
+                services: ['s3', 'mediapackage', 'medialive', 'cloudfront', 'cloudwatch']
+              })
+            };
+          };
+
+  VideonTestFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-videon-test'
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          NODE_ENV: !Ref Environment
+          AWS_ACCOUNT_ID: !Ref AWS::AccountId
+          REGION: !Ref AWS::Region
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            const timestamp = new Date().toISOString();
+            const clientIP = event.requestContext?.identity?.sourceIp || 'unknown';
+            
+            let response = {
+              status: 'success',
+              message: 'Videon Edge Node connectivity test successful',
+              timestamp: timestamp,
+              server: {
+                name: 'Lunora Player Backend',
+                version: '1.0.0',
+                environment: process.env.NODE_ENV,
+                region: process.env.AWS_REGION,
+                account: process.env.AWS_ACCOUNT_ID
+              },
+              client: {
+                ip: clientIP,
+                userAgent: event.headers?.['User-Agent'] || 'Unknown'
+              }
+            };
+            
+            if (event.httpMethod === 'POST' && event.body) {
+              try {
+                const payload = JSON.parse(event.body);
+                response.received = payload;
+                response.echo = {
+                  ...payload,
+                  serverProcessedAt: timestamp
+                };
+              } catch (e) {
+                response.error = 'Invalid JSON payload';
+              }
+            }
+            
+            return {
+              statusCode: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+              },
+              body: JSON.stringify(response)
+            };
+          };
+
+Outputs:
+  PlayerBucketName:
+    Description: 'S3 bucket name for player application'
+    Value: !Ref PlayerBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-PlayerBucket'
+
+  DashboardBucketName:
+    Description: 'S3 bucket name for dashboard application'
+    Value: !Ref DashboardBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-DashboardBucket'
+
+  PlayerCloudFrontDomain:
+    Description: 'CloudFront domain for player application'
+    Value: !GetAtt PlayerCloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-PlayerCloudFrontDomain'
+
+  DashboardCloudFrontDomain:
+    Description: 'CloudFront domain for dashboard application'
+    Value: !GetAtt DashboardCloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-DashboardCloudFrontDomain'
+
+  ApiGatewayId:
+    Description: 'API Gateway ID'
+    Value: !Ref ApiGateway
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiGateway'
+
+  PlayerURL:
+    Description: 'Player application URL'
+    Value: !Sub 'https://player.${DomainName}'
+
+  DashboardURL:
+    Description: 'Dashboard application URL'
+    Value: !Sub 'https://dashboard.${DomainName}'

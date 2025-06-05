@@ -70,6 +70,8 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+temp-*.json
+*-temp.*
 
 # Build outputs
 dist/

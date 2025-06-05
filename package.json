@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "npx http-server . -p 8080 -c-1",
     "dashboard": "npx http-server . -p 8081 -c-1 -o dashboard.html",
-    "videon-test": "npx http-server . -p 8082 -c-1 -o videon-test.html",
+
     "backend": "node backend/server.js",
     "backend-dev": "nodemon backend/server.js",
     "start": "concurrently \"AWS_PROFILE=lunora-media AWS_SDK_LOAD_CONFIG=1 npm run backend\" \"npm run dashboard\"",
