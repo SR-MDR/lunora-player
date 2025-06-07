@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunora Streaming Control - Multi-Destination Broadcasting</title>
+    <link rel="stylesheet" href="css/streaming.css">
+    <link rel="stylesheet" href="css/multi-destination.css">
+</head>
+<body>
+    <div class="streaming-container">
+        <!-- Header -->
+        <header class="streaming-header">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1>🎯 Lunora Streaming Control</h1>
+                    <p class="header-subtitle">Multi-Destination Broadcasting Platform</p>
+                </div>
+                <div class="header-right">
+                    <div class="connection-status">
+                        <span id="connection-status" class="status-indicator">🔄 Connecting...</span>
+                    </div>
+                    <div class="header-actions">
+                        <button id="refresh-btn" class="btn-icon" title="Refresh">🔄</button>
+                        <button id="settings-btn" class="btn-icon" title="Settings">⚙️</button>
+                        <a href="dashboard.html" class="btn-secondary btn-small">📊 Dashboard</a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Quick Status Bar -->
+        <section class="quick-status">
+            <div class="status-item">
+                <span class="status-label">Destinations:</span>
+                <span id="destinations-count" class="status-value">0</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Active Streams:</span>
+                <span id="active-streams-count" class="status-value">0</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Total Bandwidth:</span>
+                <span id="total-bandwidth" class="status-value">0 Mbps</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Session Time:</span>
+                <span id="session-time" class="status-value">00:00:00</span>
+            </div>
+        </section>
+
+        <!-- Main Content -->
+        <main class="streaming-main">
+            <!-- Multi-Destination Streaming Section -->
+            <section class="multi-destination-streaming">
+                <!-- Destination Management Panel -->
+                <div class="destinations-panel">
+                    <div class="destinations-header">
+                        <h2>Streaming Destinations</h2>
+                        <button class="btn-primary" onclick="multiDestination.showAddDestinationModal()">
+                            + Add Destination
+                        </button>
+                    </div>
+                    
+                    <div id="destinations-list" class="destinations-list">
+                        <!-- Dynamic destination cards will be inserted here -->
+                        <div class="no-destinations">
+                            <div class="no-destinations-icon">🎯</div>
+                            <h3>No destinations configured yet</h3>
+                            <p>Add your first streaming destination to get started with multi-platform broadcasting.</p>
+                            <button class="btn-primary" onclick="multiDestination.showAddDestinationModal()">
+                                + Add Your First Destination
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Master Controls -->
+                <div class="master-controls">
+                    <div class="controls-section">
+                        <h3>Master Controls</h3>
+                        <div class="controls-buttons">
+                            <button id="start-all-btn" class="btn-success btn-large">
+                                🔴 Start All Selected
+                            </button>
+                            <button id="stop-all-btn" class="btn-danger btn-large" disabled>
+                                ⏹️ Stop All Streams
+                            </button>
+                            <button id="pause-all-btn" class="btn-warning btn-large" disabled>
+                                ⏸️ Pause All Streams
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Live Status Panel -->
+                <div id="live-status-panel" class="live-status hidden">
+                    <div class="live-header">
+                        <h2>🔴 LIVE STREAMING</h2>
+                        <div class="live-info">
+                            <span class="live-duration">
+                                Duration: <span id="session-duration" class="session-duration">00:00:00</span>
+                            </span>
+                            <button id="end-session-btn" class="btn-danger btn-small">End Session</button>
+                        </div>
+                    </div>
+                    
+                    <div id="active-streams-list" class="active-streams-list">
+                        <!-- Active stream status cards will be inserted here -->
+                    </div>
+                    
+                    <div class="session-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Total Viewers:</span>
+                            <span id="total-viewers" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Peak Viewers:</span>
+                            <span id="peak-viewers" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Data Sent:</span>
+                            <span id="data-sent" class="stat-value">0 GB</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Avg Quality:</span>
+                            <span id="avg-quality" class="stat-value">1080p</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Quick Actions -->
+            <section class="quick-actions">
+                <h2>Quick Actions</h2>
+                <div class="actions-grid">
+                    <button class="action-card" onclick="showPresetsManager()">
+                        <div class="action-icon">🎛️</div>
+                        <div class="action-text">
+                            <h3>Manage Presets</h3>
+                            <p>Configure encoding presets for different platforms</p>
+                        </div>
+                    </button>
+                    
+                    <button class="action-card" onclick="showStreamingHistory()">
+                        <div class="action-icon">📊</div>
+                        <div class="action-text">
+                            <h3>Streaming History</h3>
+                            <p>View past streaming sessions and analytics</p>
+                        </div>
+                    </button>
+                    
+                    <button class="action-card" onclick="testAllConnections()">
+                        <div class="action-icon">🧪</div>
+                        <div class="action-text">
+                            <h3>Test All Connections</h3>
+                            <p>Verify connectivity to all configured destinations</p>
+                        </div>
+                    </button>
+                    
+                    <button class="action-card" onclick="openPlayer()">
+                        <div class="action-icon">▶️</div>
+                        <div class="action-text">
+                            <h3>Preview Player</h3>
+                            <p>Test your stream with the Lunora Player</p>
+                        </div>
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="streaming-footer">
+            <div class="footer-content">
+                <div class="footer-left">
+                    <p>&copy; 2024 Lunora Media Services. Multi-Destination Streaming Platform.</p>
+                </div>
+                <div class="footer-right">
+                    <span class="footer-status">
+                        Backend: <span id="backend-status">Connected</span> | 
+                        AWS: <span id="aws-status">Active</span>
+                    </span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="config/aws-config.js"></script>
+    <script src="config/streaming-presets.js"></script>
+    <script src="js/multi-destination.js"></script>
+    <script src="js/streaming-control.js"></script>
+</body>
+</html>

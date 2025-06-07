@@ -33,7 +33,7 @@ A modern, browser-based video player with multi-language support and AWS Media S
 ## Quick Start
 
 ### Prerequisites
-- Node.js (for development server)
+- Node.js 22.x (Active LTS - for development server and AWS Lambda compatibility)
 - AWS CLI configured with access to Lunora-Media-Services account (372241484305)
 - AWS account with Media Services enabled in us-west-2 region
 - Domain name for production deployment
@@ -113,15 +113,38 @@ npm run dashboard  # Dashboard on port 8081
 ./scripts/monitor-aws.sh status
 ```
 
-**Dashboard URLs:**
-- **Real-time Dashboard**: `http://localhost:8081/dashboard.html`
-- **Backend API**: `http://localhost:3000/api/health`
+**Application URLs:**
 - **Video Player**: `http://localhost:8080`
+- **AWS Dashboard**: `http://localhost:8081/dashboard.html`
+- **Streaming Control**: `http://localhost:8082/streaming.html`
+- **Backend API**: `http://localhost:3000/api/health`
+
+### 7. Multi-Destination Streaming (New!)
+```bash
+# Setup DynamoDB tables (one-time)
+npm run setup-db
+
+# Start streaming control interface
+npm run start-streaming
+
+# Or start components individually:
+npm run backend    # API server on port 3000
+npm run streaming  # Streaming control on port 8082
+```
+
+**Multi-Destination Features:**
+- Stream to YouTube, X (Twitter), LinkedIn, and custom RTMP simultaneously
+- Platform-optimized encoding presets
+- Individual destination control (start/stop specific platforms)
+- Real-time monitoring and status updates
+- Secure stream key management with AWS Parameter Store
 
 ## Architecture
 
 ### Frontend Components
 - **HTML5 Video Player**: Built with HLS.js for adaptive streaming
+- **AWS Monitoring Dashboard**: Real-time AWS service status and metrics
+- **Streaming Control Page**: Dedicated multi-destination streaming interface
 - **Language Selector**: Dynamic audio and subtitle track selection
 - **Responsive UI**: Works on desktop, tablet, and mobile devices
 
@@ -191,22 +214,33 @@ The player includes several test streams for development and testing.
 lunora-player/
 ├── index.html              # Main player page
 ├── dashboard.html          # AWS services dashboard
+├── streaming.html          # Multi-destination streaming control
 ├── css/
 │   ├── player.css          # Player styles
-│   └── dashboard.css       # Dashboard styles
+│   ├── dashboard.css       # Dashboard styles
+│   ├── streaming.css       # Streaming page styles
+│   └── multi-destination.css # Multi-destination components
 ├── js/
 │   ├── player.js           # Main player logic
 │   ├── language-selector.js # Language selection
-│   └── dashboard.js        # Dashboard functionality
+│   ├── dashboard.js        # Dashboard functionality
+│   ├── multi-destination.js # Multi-destination management
+│   └── streaming-control.js # Streaming page controller
 ├── config/
 │   ├── player-config.js    # Player configuration
-│   └── aws-config.js       # AWS configuration (auto-generated)
+│   ├── aws-config.js       # AWS configuration (auto-generated)
+│   └── streaming-presets.js # Platform encoding presets
 ├── backend/
-│   └── server.js           # Express API server
+│   └── server.js           # Express API server (extended with streaming APIs)
 ├── aws/
 │   └── cloudformation/     # AWS infrastructure templates
-├── scripts/                # Deployment and utility scripts
+├── scripts/
+│   ├── setup-dynamodb-tables.js # DynamoDB table creation
+│   └── ...                 # Other deployment and utility scripts
 └── docs/                   # Documentation
+    ├── multi-destination-setup-guide.md
+    ├── streaming-page-guide.md
+    └── ...
 ```
 
 ### Adding New Features

@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Multi-language video player with AWS Media Services integration",
   "main": "index.html",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "dev": "npx http-server . -p 8080 -c-1",
     "dashboard": "npx http-server . -p 8081 -c-1 -o dashboard.html",

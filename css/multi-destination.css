@@ -1,0 +1,518 @@
+/* Multi-Destination Streaming Styles */
+
+/* ============================================================================
+   MULTI-DESTINATION STREAMING SECTION
+   ============================================================================ */
+
+.multi-destination-streaming {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    margin: 24px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e1e5e9;
+}
+
+.multi-destination-streaming h2 {
+    margin: 0 0 24px 0;
+    color: #2c3e50;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+/* ============================================================================
+   DESTINATIONS PANEL
+   ============================================================================ */
+
+.destinations-panel {
+    margin-bottom: 24px;
+}
+
+.destinations-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f8f9fa;
+}
+
+.destinations-header h3 {
+    margin: 0;
+    color: #495057;
+    font-size: 1.2rem;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #0056b3, #004085);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+/* ============================================================================
+   DESTINATION CARDS
+   ============================================================================ */
+
+.destinations-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.destination-card {
+    background: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.destination-card:hover {
+    border-color: #007bff;
+    box-shadow: 0 4px 16px rgba(0, 123, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+.destination-card.enabled {
+    border-color: #28a745;
+    background: linear-gradient(135deg, #f8fff9, #f0fff4);
+}
+
+.destination-card.streaming {
+    border-color: #dc3545;
+    background: linear-gradient(135deg, #fff8f8, #fff0f0);
+    animation: pulse-streaming 2s infinite;
+}
+
+@keyframes pulse-streaming {
+    0%, 100% { box-shadow: 0 4px 16px rgba(220, 53, 69, 0.2); }
+    50% { box-shadow: 0 4px 20px rgba(220, 53, 69, 0.4); }
+}
+
+.destination-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.destination-info h4 {
+    margin: 0 0 4px 0;
+    color: #2c3e50;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.destination-platform {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.platform-youtube {
+    background: #ff0000;
+    color: white;
+}
+
+.platform-x {
+    background: #1da1f2;
+    color: white;
+}
+
+.platform-linkedin {
+    background: #0077b5;
+    color: white;
+}
+
+.platform-custom {
+    background: #6c757d;
+    color: white;
+}
+
+.destination-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+    font-size: 0.9rem;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-ready { background: #28a745; }
+.status-streaming { background: #dc3545; animation: blink 1s infinite; }
+.status-error { background: #ffc107; }
+.status-disabled { background: #6c757d; }
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
+.destination-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #218838;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+    transform: translateY(-1px);
+}
+
+.btn-warning {
+    background: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background: #e0a800;
+    transform: translateY(-1px);
+}
+
+/* ============================================================================
+   MASTER CONTROLS
+   ============================================================================ */
+
+.master-controls {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    padding: 20px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    border: 2px solid #dee2e6;
+}
+
+.master-controls button {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 140px;
+}
+
+/* ============================================================================
+   LIVE STATUS PANEL
+   ============================================================================ */
+
+.live-status {
+    background: linear-gradient(135deg, #fff5f5, #ffe6e6);
+    border: 2px solid #dc3545;
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+}
+
+.live-status.hidden {
+    display: none;
+}
+
+.live-status h3 {
+    margin: 0 0 20px 0;
+    color: #dc3545;
+    font-size: 1.3rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.session-duration {
+    font-family: 'Courier New', monospace;
+    background: #dc3545;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.active-streams-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.active-stream-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.stream-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.stream-name {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.stream-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 8px 0;
+    font-size: 0.85rem;
+}
+
+.metric {
+    display: flex;
+    justify-content: space-between;
+}
+
+.metric-label {
+    color: #6c757d;
+}
+
+.metric-value {
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+/* ============================================================================
+   FORM STYLES
+   ============================================================================ */
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #495057;
+    font-size: 0.9rem;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #e9ecef;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: border-color 0.2s ease;
+    box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.form-group input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+}
+
+.form-group small {
+    display: block;
+    margin-top: 4px;
+    color: #6c757d;
+    font-size: 0.8rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px solid #f8f9fa;
+}
+
+.no-destinations {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+    background: #f8f9fa;
+    border-radius: 12px;
+    border: 2px dashed #dee2e6;
+}
+
+.no-destinations p {
+    margin: 0 0 16px 0;
+    font-size: 1.1rem;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 4px 0;
+    font-size: 0.85rem;
+}
+
+.detail-label {
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.detail-value {
+    color: #495057;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+}
+
+/* ============================================================================
+   MODAL STYLES
+   ============================================================================ */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f8f9fa;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 1.3rem;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #6c757d;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+    background: #f8f9fa;
+    color: #495057;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .destinations-list {
+        grid-template-columns: 1fr;
+    }
+    
+    .master-controls {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .master-controls button {
+        min-width: auto;
+    }
+    
+    .active-streams-list {
+        grid-template-columns: 1fr;
+    }
+    
+    .modal-content {
+        margin: 20px;
+        width: calc(100% - 40px);
+    }
+}

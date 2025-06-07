@@ -1,0 +1,298 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lunora Player - Multi-Destination Streaming Infrastructure'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'lunora-player'
+    Description: 'Name of the project for resource naming'
+  
+  Environment:
+    Type: String
+    Default: 'prod'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+
+Resources:
+  # DynamoDB Tables for Multi-Destination Streaming
+  DestinationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-destinations-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: destination_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: destination_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: multi-destination-streaming
+
+  PresetsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-presets-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: preset_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: preset_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: streaming-presets
+
+  StreamingSessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-streaming-sessions-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: streaming-sessions
+
+  # KMS Key for Parameter Store encryption
+  ParameterStoreKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub 'KMS Key for ${ProjectName} Parameter Store encryption'
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow Lambda Service
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: '*'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  ParameterStoreKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${ProjectName}-${Environment}-parameter-store'
+      TargetKeyId: !Ref ParameterStoreKMSKey
+
+  # IAM Role for Lambda Functions
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-lambda-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt DestinationsTable.Arn
+                  - !GetAtt PresetsTable.Arn
+                  - !GetAtt StreamingSessionsTable.Arn
+        - PolicyName: ParameterStoreAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                  - ssm:GetParameters
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${ProjectName}/*'
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                Resource: !GetAtt ParameterStoreKMSKey.Arn
+        - PolicyName: MediaServicesAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - medialive:DescribeChannel
+                  - medialive:ListChannels
+                  - medialive:StartChannel
+                  - medialive:StopChannel
+                  - mediapackage:DescribeChannel
+                  - mediapackage:ListOriginEndpoints
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - cloudfront:GetDistribution
+                  - cloudfront:ListDistributions
+                  - cloudwatch:GetMetricStatistics
+                Resource: '*'
+
+  # Lambda Function for Multi-Destination API
+  MultiDestinationAPIFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-multi-destination-api'
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          NODE_ENV: !Ref Environment
+          AWS_ACCOUNT_ID: !Ref AWS::AccountId
+          REGION: !Ref AWS::Region
+          DESTINATIONS_TABLE: !Ref DestinationsTable
+          PRESETS_TABLE: !Ref PresetsTable
+          SESSIONS_TABLE: !Ref StreamingSessionsTable
+          PARAMETER_STORE_PREFIX: !Sub '/${ProjectName}/streaming'
+          KMS_KEY_ID: !Ref ParameterStoreKMSKey
+      Code:
+        ZipFile: |
+          // Placeholder - will be replaced during deployment
+          exports.handler = async (event) => {
+            return {
+              statusCode: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+              },
+              body: JSON.stringify({
+                message: 'Multi-destination API placeholder',
+                timestamp: new Date().toISOString()
+              })
+            };
+          };
+
+  # API Gateway for Multi-Destination API
+  MultiDestinationAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-multi-destination-api'
+      Description: 'API for multi-destination streaming management'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # API Gateway Deployment
+  APIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - DestinationsResource
+      - PresetsResource
+      - StreamingResource
+    Properties:
+      RestApiId: !Ref MultiDestinationAPI
+      StageName: !Ref Environment
+
+  # API Gateway Resources and Methods (simplified structure)
+  DestinationsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref MultiDestinationAPI
+      ParentId: !GetAtt MultiDestinationAPI.RootResourceId
+      PathPart: destinations
+
+  PresetsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref MultiDestinationAPI
+      ParentId: !GetAtt MultiDestinationAPI.RootResourceId
+      PathPart: presets
+
+  StreamingResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref MultiDestinationAPI
+      ParentId: !GetAtt MultiDestinationAPI.RootResourceId
+      PathPart: streaming
+
+Outputs:
+  DestinationsTableName:
+    Description: 'DynamoDB table name for destinations'
+    Value: !Ref DestinationsTable
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-destinations-table'
+
+  PresetsTableName:
+    Description: 'DynamoDB table name for presets'
+    Value: !Ref PresetsTable
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-presets-table'
+
+  StreamingSessionsTableName:
+    Description: 'DynamoDB table name for streaming sessions'
+    Value: !Ref StreamingSessionsTable
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-sessions-table'
+
+  APIGatewayURL:
+    Description: 'API Gateway URL for multi-destination API'
+    Value: !Sub 'https://${MultiDestinationAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-api-url'
+
+  KMSKeyId:
+    Description: 'KMS Key ID for Parameter Store encryption'
+    Value: !Ref ParameterStoreKMSKey
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-kms-key'

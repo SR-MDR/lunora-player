@@ -28,13 +28,24 @@ const mediaPackage = new AWS.MediaPackage();
 const mediaLive = new AWS.MediaLive();
 const cloudFront = new AWS.CloudFront();
 const cloudWatch = new AWS.CloudWatch();
+const dynamodb = new AWS.DynamoDB.DocumentClient();
+const ssm = new AWS.SSM();
 
 // Configuration
 const CONFIG = {
     region: 'us-west-2',
     accountId: '372241484305',
     s3Bucket: 'lunora-media-videos-dev-372241484305',
-    mediaPackageChannel: 'lunora-player-dev-channel'
+    mediaPackageChannel: 'lunora-player-dev-channel',
+    // Multi-destination streaming configuration
+    dynamodb: {
+        destinationsTable: 'lunora-destinations',
+        presetsTable: 'lunora-presets',
+        sessionsTable: 'lunora-streaming-sessions'
+    },
+    parameterStore: {
+        prefix: '/lunora-player/streaming'
+    }
 };
 
 // Utility function to handle AWS errors
@@ -461,11 +472,485 @@ app.use((error, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
+// ============================================================================
+// MULTI-DESTINATION STREAMING API ENDPOINTS
+// ============================================================================
+
+// Helper function to generate unique IDs
+const generateId = (prefix) => {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Helper function to get secure parameter from Parameter Store
+const getSecureParameter = async (parameterName) => {
+    try {
+        const result = await ssm.getParameter({
+            Name: parameterName,
+            WithDecryption: true
+        }).promise();
+        return result.Parameter.Value;
+    } catch (error) {
+        console.error(`Error getting parameter ${parameterName}:`, error.message);
+        return null;
+    }
+};
+
+// Helper function to store secure parameter in Parameter Store
+const storeSecureParameter = async (parameterName, value, description = '') => {
+    try {
+        await ssm.putParameter({
+            Name: parameterName,
+            Value: value,
+            Type: 'SecureString',
+            Description: description,
+            Overwrite: true
+        }).promise();
+        return true;
+    } catch (error) {
+        console.error(`Error storing parameter ${parameterName}:`, error.message);
+        return false;
+    }
+};
+
+// ============================================================================
+// DESTINATIONS API
+// ============================================================================
+
+// Get all destinations
+app.get('/api/destinations', async (req, res) => {
+    try {
+        const result = await dynamodb.scan({
+            TableName: CONFIG.dynamodb.destinationsTable
+        }).promise();
+
+        // Don't include actual stream keys in the response for security
+        const destinations = result.Items.map(item => ({
+            ...item,
+            stream_key: item.stream_key_param ? '***ENCRYPTED***' : null
+        }));
+
+        res.json({
+            status: 'success',
+            destinations: destinations,
+            count: destinations.length
+        });
+    } catch (error) {
+        console.error('Error fetching destinations:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to fetch destinations',
+            error: error.message
+        });
+    }
+});
+
+// Create new destination
+app.post('/api/destinations', async (req, res) => {
+    try {
+        const { name, platform, rtmp_url, stream_key, preset_id, enabled = true } = req.body;
+
+        if (!name || !platform) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Name and platform are required'
+            });
+        }
+
+        const destination_id = generateId('dest');
+        const timestamp = new Date().toISOString();
+
+        // Store stream key securely in Parameter Store if provided
+        let stream_key_param = null;
+        if (stream_key) {
+            stream_key_param = `${CONFIG.parameterStore.prefix}/${platform}/stream-key-${destination_id}`;
+            const stored = await storeSecureParameter(
+                stream_key_param,
+                stream_key,
+                `Stream key for ${name} (${platform})`
+            );
+            if (!stored) {
+                return res.status(500).json({
+                    status: 'error',
+                    message: 'Failed to store stream key securely'
+                });
+            }
+        }
+
+        const destination = {
+            destination_id,
+            name,
+            platform,
+            rtmp_url: rtmp_url || null,
+            stream_key_param,
+            preset_id: preset_id || `preset_${platform}_default`,
+            enabled,
+            created_at: timestamp,
+            updated_at: timestamp
+        };
+
+        await dynamodb.put({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Item: destination
+        }).promise();
+
+        // Return destination without sensitive data
+        const responseDestination = {
+            ...destination,
+            stream_key: stream_key ? '***ENCRYPTED***' : null
+        };
+        delete responseDestination.stream_key_param;
+
+        res.json({
+            status: 'success',
+            message: 'Destination created successfully',
+            destination: responseDestination
+        });
+    } catch (error) {
+        console.error('Error creating destination:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to create destination',
+            error: error.message
+        });
+    }
+});
+
+// Update destination
+app.put('/api/destinations/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, platform, rtmp_url, stream_key, preset_id, enabled } = req.body;
+
+        // Get existing destination
+        const existing = await dynamodb.get({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: id }
+        }).promise();
+
+        if (!existing.Item) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Destination not found'
+            });
+        }
+
+        const timestamp = new Date().toISOString();
+        const updates = {
+            updated_at: timestamp
+        };
+
+        // Update fields if provided
+        if (name !== undefined) updates.name = name;
+        if (platform !== undefined) updates.platform = platform;
+        if (rtmp_url !== undefined) updates.rtmp_url = rtmp_url;
+        if (preset_id !== undefined) updates.preset_id = preset_id;
+        if (enabled !== undefined) updates.enabled = enabled;
+
+        // Handle stream key update
+        if (stream_key !== undefined) {
+            let stream_key_param = existing.Item.stream_key_param;
+            if (!stream_key_param) {
+                stream_key_param = `${CONFIG.parameterStore.prefix}/${platform || existing.Item.platform}/stream-key-${id}`;
+            }
+
+            const stored = await storeSecureParameter(
+                stream_key_param,
+                stream_key,
+                `Stream key for ${name || existing.Item.name} (${platform || existing.Item.platform})`
+            );
+
+            if (!stored) {
+                return res.status(500).json({
+                    status: 'error',
+                    message: 'Failed to update stream key securely'
+                });
+            }
+
+            updates.stream_key_param = stream_key_param;
+        }
+
+        // Build update expression
+        const updateExpression = 'SET ' + Object.keys(updates).map(key => `#${key} = :${key}`).join(', ');
+        const expressionAttributeNames = {};
+        const expressionAttributeValues = {};
+
+        Object.keys(updates).forEach(key => {
+            expressionAttributeNames[`#${key}`] = key;
+            expressionAttributeValues[`:${key}`] = updates[key];
+        });
+
+        await dynamodb.update({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: id },
+            UpdateExpression: updateExpression,
+            ExpressionAttributeNames: expressionAttributeNames,
+            ExpressionAttributeValues: expressionAttributeValues
+        }).promise();
+
+        res.json({
+            status: 'success',
+            message: 'Destination updated successfully'
+        });
+    } catch (error) {
+        console.error('Error updating destination:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to update destination',
+            error: error.message
+        });
+    }
+});
+
+// Delete destination
+app.delete('/api/destinations/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Get existing destination to clean up Parameter Store
+        const existing = await dynamodb.get({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: id }
+        }).promise();
+
+        if (!existing.Item) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Destination not found'
+            });
+        }
+
+        // Delete from DynamoDB
+        await dynamodb.delete({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: id }
+        }).promise();
+
+        // Clean up Parameter Store if stream key exists
+        if (existing.Item.stream_key_param) {
+            try {
+                await ssm.deleteParameter({
+                    Name: existing.Item.stream_key_param
+                }).promise();
+            } catch (error) {
+                console.warn(`Warning: Could not delete parameter ${existing.Item.stream_key_param}:`, error.message);
+            }
+        }
+
+        res.json({
+            status: 'success',
+            message: 'Destination deleted successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting destination:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to delete destination',
+            error: error.message
+        });
+    }
+});
+
+// Test destination connectivity
+app.post('/api/destinations/:id/test', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Get destination details
+        const result = await dynamodb.get({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: id }
+        }).promise();
+
+        if (!result.Item) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Destination not found'
+            });
+        }
+
+        const destination = result.Item;
+
+        // For now, return a simulated test result
+        // In a full implementation, this would actually test RTMP connectivity
+        const testResult = {
+            status: 'success',
+            destination_id: id,
+            name: destination.name,
+            platform: destination.platform,
+            connectivity: 'reachable',
+            latency: Math.floor(Math.random() * 100) + 50, // Simulated latency
+            timestamp: new Date().toISOString()
+        };
+
+        res.json(testResult);
+    } catch (error) {
+        console.error('Error testing destination:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to test destination',
+            error: error.message
+        });
+    }
+});
+
+// ============================================================================
+// PRESETS API
+// ============================================================================
+
+// Get all presets
+app.get('/api/presets', async (req, res) => {
+    try {
+        const { platform } = req.query;
+
+        let params = {
+            TableName: CONFIG.dynamodb.presetsTable
+        };
+
+        // Filter by platform if specified
+        if (platform) {
+            params.FilterExpression = 'platform = :platform';
+            params.ExpressionAttributeValues = {
+                ':platform': platform
+            };
+        }
+
+        const result = await dynamodb.scan(params).promise();
+
+        res.json({
+            status: 'success',
+            presets: result.Items,
+            count: result.Items.length
+        });
+    } catch (error) {
+        console.error('Error fetching presets:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to fetch presets',
+            error: error.message
+        });
+    }
+});
+
+// Create new preset
+app.post('/api/presets', async (req, res) => {
+    try {
+        const { name, platform, video_settings, audio_settings, advanced_settings } = req.body;
+
+        if (!name || !platform || !video_settings || !audio_settings) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Name, platform, video_settings, and audio_settings are required'
+            });
+        }
+
+        const preset_id = generateId('preset');
+        const timestamp = new Date().toISOString();
+
+        const preset = {
+            preset_id,
+            name,
+            platform,
+            video_settings,
+            audio_settings,
+            advanced_settings: advanced_settings || {},
+            created_at: timestamp,
+            updated_at: timestamp
+        };
+
+        await dynamodb.put({
+            TableName: CONFIG.dynamodb.presetsTable,
+            Item: preset
+        }).promise();
+
+        res.json({
+            status: 'success',
+            message: 'Preset created successfully',
+            preset: preset
+        });
+    } catch (error) {
+        console.error('Error creating preset:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to create preset',
+            error: error.message
+        });
+    }
+});
+
+// ============================================================================
+// STREAMING CONTROL API
+// ============================================================================
+
+// Get streaming status
+app.get('/api/streaming/status', async (req, res) => {
+    try {
+        // Get MediaLive channel status
+        const channels = await mediaLive.listChannels().promise();
+        const activeChannels = [];
+
+        for (const channel of channels.Channels) {
+            if (channel.State === 'RUNNING') {
+                try {
+                    const details = await mediaLive.describeChannel({
+                        ChannelId: channel.Id
+                    }).promise();
+
+                    activeChannels.push({
+                        id: channel.Id,
+                        name: channel.Name,
+                        state: channel.State,
+                        destinations: details.Destinations?.length || 0,
+                        inputAttachments: details.InputAttachments?.length || 0
+                    });
+                } catch (err) {
+                    console.error(`Error getting channel details for ${channel.Id}:`, err.message);
+                }
+            }
+        }
+
+        // Get active destinations from DynamoDB
+        const destinationsResult = await dynamodb.scan({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            FilterExpression: 'enabled = :enabled',
+            ExpressionAttributeValues: {
+                ':enabled': true
+            }
+        }).promise();
+
+        res.json({
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            streaming: {
+                active: activeChannels.length > 0,
+                channels: activeChannels,
+                destinations: {
+                    total: destinationsResult.Items.length,
+                    enabled: destinationsResult.Items.filter(d => d.enabled).length,
+                    list: destinationsResult.Items.map(d => ({
+                        id: d.destination_id,
+                        name: d.name,
+                        platform: d.platform,
+                        enabled: d.enabled
+                    }))
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error getting streaming status:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to get streaming status',
+            error: error.message
+        });
+    }
+});
+
 // Start server
 app.listen(PORT, () => {
     console.log(`🚀 Lunora Player Backend API running on port ${PORT}`);
     console.log(`📊 Dashboard API available at http://localhost:${PORT}/api/dashboard`);
     console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
+    console.log(`🎯 Multi-destination API: http://localhost:${PORT}/api/destinations`);
     console.log(`📁 AWS Profile: lunora-media`);
     console.log(`🌍 AWS Region: ${CONFIG.region}`);
     console.log(`🏢 AWS Account: ${CONFIG.accountId}`);

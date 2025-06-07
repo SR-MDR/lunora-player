@@ -5,7 +5,7 @@ Thank you for your interest in contributing to Lunora Player! This document prov
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ 
+- Node.js 22.x (Active LTS - recommended for AWS Lambda compatibility)
 - AWS CLI configured with appropriate permissions
 - Git and GitHub account
 - Basic knowledge of JavaScript, HTML5 video, and AWS Media Services
