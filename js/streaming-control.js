@@ -1,7 +1,7 @@
 // Lunora Streaming Control - Dedicated Streaming Page Controller
 class StreamingController {
     constructor() {
-        this.apiBaseUrl = 'http://localhost:3000/api';
+        this.apiBaseUrl = 'https://hi2pfpdbrlcry5w73wt27xrniu0vhykl.lambda-url.us-west-2.on.aws/api';
         this.refreshInterval = null;
         this.sessionStartTime = null;
         this.stats = {
@@ -10,7 +10,7 @@ class StreamingController {
             dataSent: 0,
             avgQuality: '1080p'
         };
-        
+
         this.init();
     }
 
@@ -294,7 +294,7 @@ async function testAllConnections() {
     
     for (const dest of destinations) {
         try {
-            const response = await fetch(`http://localhost:3000/api/destinations/${dest.destination_id}/test`, {
+            const response = await fetch(`https://hi2pfpdbrlcry5w73wt27xrniu0vhykl.lambda-url.us-west-2.on.aws/api/destinations/${dest.destination_id}/test`, {
                 method: 'POST'
             });
             const result = await response.json();

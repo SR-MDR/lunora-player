@@ -77,6 +77,14 @@ temp-*.json
 dist/
 build/
 
+# Lambda deployment packages
+lambda-deployment.zip
+*.zip
+
+# Test files
+test-*.html
+test-*.json
+
 # Test files
 test-results/
 coverage/

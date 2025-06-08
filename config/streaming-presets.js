@@ -139,6 +139,118 @@ const StreamingPresets = {
         }
     },
 
+    // HLS Player (Internal Testing)
+    hls: {
+        'preset_hls_test': {
+            preset_id: 'preset_hls_test',
+            name: 'HLS Player Test (1080p30)',
+            platform: 'hls',
+            video_settings: {
+                resolution: '1920x1080',
+                framerate: 30,
+                bitrate: 5000,
+                codec: 'H.264',
+                profile: 'High',
+                keyframe_interval: 2,
+                b_frames: 2
+            },
+            audio_settings: {
+                codec: 'AAC',
+                bitrate: 128,
+                sample_rate: 48000,
+                channels: 'stereo'
+            },
+            advanced_settings: {
+                gop_size: 60,
+                rate_control: 'CBR',
+                buffer_size: 10000
+            },
+            description: 'Optimized for Lunora Player HLS testing'
+        },
+        'preset_hls_low_latency': {
+            preset_id: 'preset_hls_low_latency',
+            name: 'HLS Low Latency (720p30)',
+            platform: 'hls',
+            video_settings: {
+                resolution: '1280x720',
+                framerate: 30,
+                bitrate: 3000,
+                codec: 'H.264',
+                profile: 'Main',
+                keyframe_interval: 1,
+                b_frames: 0
+            },
+            audio_settings: {
+                codec: 'AAC',
+                bitrate: 128,
+                sample_rate: 48000,
+                channels: 'stereo'
+            },
+            advanced_settings: {
+                gop_size: 30,
+                rate_control: 'CBR',
+                buffer_size: 6000
+            },
+            description: 'Low latency configuration for testing'
+        }
+    },
+
+    // HLS Player Presets (Direct to MediaPackage)
+    hls: {
+        'preset_hls_hd': {
+            preset_id: 'preset_hls_hd',
+            name: 'HLS Player HD (1080p30)',
+            platform: 'hls',
+            video_settings: {
+                resolution: '1920x1080',
+                framerate: 30,
+                bitrate: 5000,
+                codec: 'H.264',
+                profile: 'High',
+                keyframe_interval: 2,
+                b_frames: 2
+            },
+            audio_settings: {
+                codec: 'AAC',
+                bitrate: 128,
+                sample_rate: 48000,
+                channels: 'stereo'
+            },
+            advanced_settings: {
+                gop_size: 60,
+                rate_control: 'CBR',
+                buffer_size: 10000
+            },
+            description: 'Optimized for direct HLS streaming via MediaPackage'
+        },
+        'preset_hls_720p': {
+            preset_id: 'preset_hls_720p',
+            name: 'HLS Player 720p (720p30)',
+            platform: 'hls',
+            video_settings: {
+                resolution: '1280x720',
+                framerate: 30,
+                bitrate: 3000,
+                codec: 'H.264',
+                profile: 'High',
+                keyframe_interval: 2,
+                b_frames: 2
+            },
+            audio_settings: {
+                codec: 'AAC',
+                bitrate: 128,
+                sample_rate: 48000,
+                channels: 'stereo'
+            },
+            advanced_settings: {
+                gop_size: 60,
+                rate_control: 'CBR',
+                buffer_size: 6000
+            },
+            description: 'Lower bandwidth option for HLS streaming'
+        }
+    },
+
     // Custom RTMP Presets (Flexible)
     custom: {
         'preset_custom_hd': {

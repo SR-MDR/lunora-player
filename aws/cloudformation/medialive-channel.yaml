@@ -1,0 +1,259 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lunora Player - MediaLive Channel with Multi-Source Input Support'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'lunora-player'
+    Description: 'Project name for resource naming'
+  
+  Environment:
+    Type: String
+    Default: 'prod'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+  
+  InputType:
+    Type: String
+    Default: 'RTMP_PUSH'
+    AllowedValues: ['RTMP_PUSH', 'SRT_LISTENER', 'RTP_PUSH', 'MP4_FILE']
+    Description: 'MediaLive input type'
+  
+  EnableRedundancy:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: 'Enable dual input redundancy (main + backup)'
+
+  MediaPackageChannelId:
+    Type: String
+    Description: 'MediaPackage Channel ID from infrastructure stack'
+
+  MediaLiveRoleArn:
+    Type: String
+    Description: 'MediaLive IAM Role ARN from infrastructure stack'
+
+  SecurityGroupId:
+    Type: String
+    Description: 'Security Group ID from infrastructure stack'
+
+  SubnetIds:
+    Type: String
+    Description: 'Comma-separated subnet IDs from infrastructure stack'
+
+Conditions:
+  IsRTMP: !Equals [!Ref InputType, 'RTMP_PUSH']
+  IsSRT: !Equals [!Ref InputType, 'SRT_LISTENER']
+  IsRTP: !Equals [!Ref InputType, 'RTP_PUSH']
+  IsFile: !Equals [!Ref InputType, 'MP4_FILE']
+  HasRedundancy: !Equals [!Ref EnableRedundancy, 'true']
+
+Resources:
+  # Primary MediaLive Input
+  MediaLiveInputPrimary:
+    Type: AWS::MediaLive::Input
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-input-primary'
+      Type: !Ref InputType
+      InputSecurityGroups:
+        - !Ref MediaLiveInputSecurityGroup
+      Destinations: !If
+        - IsRTMP
+        - - StreamName: !Sub '${ProjectName}-${Environment}-primary'
+        - !If
+          - IsSRT
+          - - StreamName: !Sub '${ProjectName}-${Environment}-primary'
+              Url: !Sub 'srt://0.0.0.0:9998'
+          - !Ref 'AWS::NoValue'
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+        InputType: 'Primary'
+
+  # Backup MediaLive Input (conditional)
+  MediaLiveInputBackup:
+    Type: AWS::MediaLive::Input
+    Condition: HasRedundancy
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-input-backup'
+      Type: !Ref InputType
+      InputSecurityGroups:
+        - !Ref MediaLiveInputSecurityGroup
+      Destinations: !If
+        - IsRTMP
+        - - StreamName: !Sub '${ProjectName}-${Environment}-backup'
+        - !If
+          - IsSRT
+          - - StreamName: !Sub '${ProjectName}-${Environment}-backup'
+              Url: !Sub 'srt://0.0.0.0:9999'
+          - !Ref 'AWS::NoValue'
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+        InputType: 'Backup'
+
+  # MediaLive Input Security Group
+  MediaLiveInputSecurityGroup:
+    Type: AWS::MediaLive::InputSecurityGroup
+    Properties:
+      WhitelistRules:
+        - Cidr: '0.0.0.0/0'
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+
+  # MediaLive Channel
+  MediaLiveChannel:
+    Type: AWS::MediaLive::Channel
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-channel'
+      RoleArn: !Ref MediaLiveRoleArn
+      ChannelClass: 'SINGLE_PIPELINE'
+      InputSpecification:
+        Codec: 'AVC'
+        Resolution: 'HD'
+        MaximumBitrate: 'MAX_20_MBPS'
+      InputAttachments:
+        - InputAttachmentName: 'primary-input'
+          InputId: !Ref MediaLiveInputPrimary
+          InputSettings:
+            AudioSelectors:
+              - Name: 'default-audio'
+                SelectorSettings:
+                  AudioTrackSelection:
+                    Tracks:
+                      - Track: 1
+            VideoSelector:
+              ColorSpace: 'REC_709'
+        - !If
+          - HasRedundancy
+          - InputAttachmentName: 'backup-input'
+            InputId: !Ref MediaLiveInputBackup
+            InputSettings:
+              AudioSelectors:
+                - Name: 'backup-audio'
+                  SelectorSettings:
+                    AudioTrackSelection:
+                      Tracks:
+                        - Track: 1
+              VideoSelector:
+                ColorSpace: 'REC_709'
+          - !Ref 'AWS::NoValue'
+      Destinations:
+        - Id: 'mediapackage-destination'
+          MediaPackageSettings:
+            ChannelId: !Ref MediaPackageChannelId
+          Settings:
+            - PasswordParam: ''
+              Url: !Sub 'https://mediapackage.${AWS::Region}.amazonaws.com/in/v1/${MediaPackageChannelId}/channel'
+              Username: ''
+      EncoderSettings:
+        TimecodeConfig:
+          Source: 'EMBEDDED'
+        AudioDescriptions:
+          - AudioTypeControl: 'FOLLOW_INPUT'
+            CodecSettings:
+              AacSettings:
+                Bitrate: 128000
+                CodingMode: 'CODING_MODE_2_0'
+                InputType: 'NORMAL'
+                Profile: 'LC'
+                RateControlMode: 'CBR'
+                RawFormat: 'NONE'
+                SampleRate: 48000
+                Spec: 'MPEG4'
+            LanguageCodeControl: 'FOLLOW_INPUT'
+            Name: 'audio_1'
+        VideoDescriptions:
+          - CodecSettings:
+              H264Settings:
+                AdaptiveQuantization: 'HIGH'
+                AfdSignaling: 'NONE'
+                Bitrate: 5000000
+                ColorMetadata: 'INSERT'
+                EntropyEncoding: 'CABAC'
+                FlickerAq: 'ENABLED'
+                FramerateControl: 'SPECIFIED'
+                FramerateNumerator: 30
+                FramerateDenominator: 1
+                GopBReference: 'DISABLED'
+                GopClosedCadence: 1
+                GopNumBFrames: 2
+                GopSize: 90
+                GopSizeUnits: 'FRAMES'
+                Level: 'H264_LEVEL_AUTO'
+                LookAheadRateControl: 'MEDIUM'
+                NumRefFrames: 3
+                ParControl: 'SPECIFIED'
+                Profile: 'HIGH'
+                RateControlMode: 'CBR'
+                Syntax: 'DEFAULT'
+                SceneChangeDetect: 'ENABLED'
+                SpatialAq: 'ENABLED'
+                TemporalAq: 'ENABLED'
+            Height: 1080
+            Name: 'video_1080p'
+            RespondToAfd: 'NONE'
+            ScalingBehavior: 'DEFAULT'
+            Sharpness: 50
+            Width: 1920
+        OutputGroups:
+          - Name: 'MediaPackage'
+            OutputGroupSettings:
+              MediaPackageGroupSettings:
+                Destination:
+                  DestinationRefId: 'mediapackage-destination'
+            Outputs:
+              - AudioDescriptionNames:
+                  - 'audio_1'
+                OutputName: 'output_1080p'
+                OutputSettings:
+                  MediaPackageOutputSettings: {}
+                VideoDescriptionName: 'video_1080p'
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+
+Outputs:
+  MediaLiveChannelId:
+    Description: 'MediaLive Channel ID'
+    Value: !Ref MediaLiveChannel
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-medialive-channel-id'
+
+  MediaLiveChannelArn:
+    Description: 'MediaLive Channel ARN'
+    Value: !Sub 'arn:aws:medialive:${AWS::Region}:${AWS::AccountId}:channel:${MediaLiveChannel}'
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-medialive-channel-arn'
+
+  PrimaryInputId:
+    Description: 'Primary MediaLive Input ID'
+    Value: !Ref MediaLiveInputPrimary
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-primary-input-id'
+
+  PrimaryInputEndpoint:
+    Description: 'Primary Input RTMP Endpoint'
+    Condition: IsRTMP
+    Value: !Sub 
+      - 'rtmp://${InputEndpoint}/live/${ProjectName}-${Environment}-primary'
+      - InputEndpoint: !Select [0, !GetAtt MediaLiveInputPrimary.Destinations]
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-primary-rtmp-endpoint'
+
+  BackupInputId:
+    Description: 'Backup MediaLive Input ID'
+    Condition: HasRedundancy
+    Value: !Ref MediaLiveInputBackup
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-backup-input-id'
+
+  BackupInputEndpoint:
+    Description: 'Backup Input RTMP Endpoint'
+    Condition: HasRedundancy
+    Value: !Sub 
+      - 'rtmp://${InputEndpoint}/live/${ProjectName}-${Environment}-backup'
+      - InputEndpoint: !Select [0, !GetAtt MediaLiveInputBackup.Destinations]
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-backup-rtmp-endpoint'

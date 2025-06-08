@@ -139,6 +139,16 @@ npm run streaming  # Streaming control on port 8082
 - Real-time monitoring and status updates
 - Secure stream key management with AWS Parameter Store
 
+**Multi-Source Input Support:**
+- **SRT Input**: Primary for Videon LiveEdge nodes with automatic failover
+- **RTMP Input**: OBS Studio and other software encoders
+- **File Input**: MP4/static content for testing
+- **WebRTC Input**: Browser-based streaming
+- **Redundancy**: Main + backup source configuration with AZ failover
+- **Admin Control**: Source management restricted to admin users
+
+📋 **See [Multi-Source Architecture Plan](docs/multi-source-architecture.md) for detailed implementation roadmap**
+
 ## Architecture
 
 ### Frontend Components
@@ -240,6 +250,7 @@ lunora-player/
 └── docs/                   # Documentation
     ├── multi-destination-setup-guide.md
     ├── streaming-page-guide.md
+    ├── multi-source-architecture.md  # Multi-source streaming architecture plan
     └── ...
 ```
 

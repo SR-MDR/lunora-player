@@ -1,0 +1,56 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:Scan",
+                "dynamodb:Query"
+            ],
+            "Resource": [
+                "arn:aws:dynamodb:us-west-2:372241484305:table/lunora-destinations",
+                "arn:aws:dynamodb:us-west-2:372241484305:table/lunora-presets",
+                "arn:aws:dynamodb:us-west-2:372241484305:table/lunora-streaming-sessions"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:GetParameter",
+                "ssm:PutParameter",
+                "ssm:DeleteParameter",
+                "ssm:GetParameters",
+                "ssm:GetParametersByPath"
+            ],
+            "Resource": [
+                "arn:aws:ssm:us-west-2:372241484305:parameter/lunora-player/streaming/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "medialive:ListChannels",
+                "medialive:DescribeChannel",
+                "medialive:StartChannel",
+                "medialive:StopChannel",
+                "medialive:CreateChannel",
+                "medialive:UpdateChannel",
+                "medialive:DeleteChannel"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "arn:aws:logs:us-west-2:372241484305:*"
+        }
+    ]
+}

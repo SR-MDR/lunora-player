@@ -10,7 +10,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: [
+        'https://d35au6zpsr51nc.cloudfront.net',
+        'http://localhost:3000',
+        'http://localhost:8080',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:8080'
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // AWS Configuration
@@ -559,9 +570,9 @@ app.post('/api/destinations', async (req, res) => {
         const destination_id = generateId('dest');
         const timestamp = new Date().toISOString();
 
-        // Store stream key securely in Parameter Store if provided
+        // Store stream key securely in Parameter Store if provided (not needed for HLS)
         let stream_key_param = null;
-        if (stream_key) {
+        if (stream_key && platform !== 'hls') {
             stream_key_param = `${CONFIG.parameterStore.prefix}/${platform}/stream-key-${destination_id}`;
             const stored = await storeSecureParameter(
                 stream_key_param,
@@ -745,6 +756,130 @@ app.delete('/api/destinations/:id', async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to delete destination',
+            error: error.message
+        });
+    }
+});
+
+// Start destination streaming
+app.post('/api/destinations/:id/start', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Get destination details
+        const result = await dynamodb.get({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: id }
+        }).promise();
+
+        if (!result.Item) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Destination not found'
+            });
+        }
+
+        const destination = result.Item;
+
+        if (destination.platform === 'hls') {
+            // For HLS destinations, we need to start the MediaLive channel
+            const channelId = '3714710'; // The OBS RTMP channel we created
+
+            try {
+                await medialive.startChannel({ ChannelId: channelId }).promise();
+
+                res.json({
+                    status: 'success',
+                    message: 'HLS streaming started successfully',
+                    channel_id: channelId,
+                    hls_url: 'https://dce3793146fef017.mediapackage.us-west-2.amazonaws.com/out/v1/ab090a5ad83f4d26b3ae8a23f3512081/index.m3u8'
+                });
+            } catch (error) {
+                if (error.code === 'ConflictException') {
+                    res.json({
+                        status: 'success',
+                        message: 'HLS streaming already active',
+                        channel_id: channelId,
+                        hls_url: 'https://dce3793146fef017.mediapackage.us-west-2.amazonaws.com/out/v1/ab090a5ad83f4d26b3ae8a23f3512081/index.m3u8'
+                    });
+                } else {
+                    throw error;
+                }
+            }
+        } else {
+            // For other platforms, simulate starting RTMP stream
+            res.json({
+                status: 'success',
+                message: `Started streaming to ${destination.platform}`,
+                destination_id: id
+            });
+        }
+    } catch (error) {
+        console.error('Error starting destination:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to start destination',
+            error: error.message
+        });
+    }
+});
+
+// Stop destination streaming
+app.post('/api/destinations/:id/stop', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Get destination details
+        const result = await dynamodb.get({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: id }
+        }).promise();
+
+        if (!result.Item) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Destination not found'
+            });
+        }
+
+        const destination = result.Item;
+
+        if (destination.platform === 'hls') {
+            // For HLS destinations, stop the MediaLive channel
+            const channelId = '3714710'; // The OBS RTMP channel we created
+
+            try {
+                await medialive.stopChannel({ ChannelId: channelId }).promise();
+
+                res.json({
+                    status: 'success',
+                    message: 'HLS streaming stopped successfully',
+                    channel_id: channelId
+                });
+            } catch (error) {
+                if (error.code === 'ConflictException') {
+                    res.json({
+                        status: 'success',
+                        message: 'HLS streaming already stopped',
+                        channel_id: channelId
+                    });
+                } else {
+                    throw error;
+                }
+            }
+        } else {
+            // For other platforms, simulate stopping RTMP stream
+            res.json({
+                status: 'success',
+                message: `Stopped streaming to ${destination.platform}`,
+                destination_id: id
+            });
+        }
+    } catch (error) {
+        console.error('Error stopping destination:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to stop destination',
             error: error.message
         });
     }

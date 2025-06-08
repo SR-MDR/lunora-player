@@ -4,7 +4,7 @@ class MediaServicesDashboard {
         this.awsConfig = window.AWSConfig || {};
         this.refreshInterval = null;
         this.costChart = null;
-        this.apiBaseUrl = 'http://localhost:3000/api';
+        this.apiBaseUrl = 'https://smwahluvvvo2lkg3bvxgkzpgqm0ovmqh.lambda-url.us-west-2.on.aws/api';
 
         this.init();
     }
@@ -79,24 +79,101 @@ class MediaServicesDashboard {
         }
 
         try {
-            // Load real AWS data
-            await Promise.all([
-                this.loadS3Status(),
-                this.loadMediaPackageStatus(),
-                this.loadMediaLiveStatus(),
-                this.loadCloudFrontStatus(),
-                this.loadMetrics(),
-                this.loadCostInformation()
-            ]);
+            // Load streaming destinations data (available)
+            await this.loadStreamingStatus();
 
-            // Check for alerts based on real data
+            // Set default values for AWS services (monitoring not implemented yet)
+            this.setDefaultAWSStatus();
+
+            // Check for alerts based on available data
             this.checkAlerts();
 
             console.log('Dashboard data loaded successfully');
         } catch (error) {
             console.error('Error loading dashboard data:', error);
-            this.showErrorAlert('Failed to load AWS data. Check backend connection.');
+            this.showErrorAlert('Failed to load dashboard data. Check backend connection.');
         }
+    }
+
+    async loadStreamingStatus() {
+        console.log('Loading streaming destinations status...');
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/destinations`);
+            const data = await response.json();
+
+            if (response.ok) {
+                const destinations = data.destinations || [];
+                const activeCount = destinations.filter(d => d.status === 'streaming').length;
+
+                // Update streaming status in the dashboard
+                const streamingElement = document.getElementById('streaming-destinations-count');
+                if (streamingElement) {
+                    streamingElement.textContent = `${destinations.length} configured, ${activeCount} active`;
+                }
+
+                console.log(`Streaming status: ${destinations.length} destinations, ${activeCount} active`);
+            } else {
+                console.warn('Failed to load streaming destinations:', data.error);
+            }
+        } catch (error) {
+            console.error('Error loading streaming status:', error);
+        }
+    }
+
+    setDefaultAWSStatus() {
+        console.log('Setting default AWS service status...');
+
+        // Set default S3 status
+        this.updateStatusCard('s3-status', {
+            status: 'Active',
+            statusClass: 'active',
+            detail: 'lunora-player-streaming-prod (Monitoring not implemented)'
+        });
+
+        // Set default MediaPackage status
+        this.updateStatusCard('mediapackage-status', {
+            status: 'Not Configured',
+            statusClass: 'warning',
+            detail: 'AWS monitoring not implemented yet'
+        });
+
+        // Set default MediaLive status
+        this.updateStatusCard('medialive-status', {
+            status: 'Not Configured',
+            statusClass: 'warning',
+            detail: 'AWS monitoring not implemented yet'
+        });
+
+        // Set default CloudFront status
+        this.updateStatusCard('cloudfront-status', {
+            status: 'Not Configured',
+            statusClass: 'warning',
+            detail: 'AWS monitoring not implemented yet'
+        });
+
+        // Set default metrics
+        const metricsElements = {
+            'mp-requests': '0',
+            'mp-data': '0 GB',
+            'error-rate': '0%',
+            'avg-latency': 'N/A',
+            'current-cost': '$0.00',
+            'mediapackage-cost': '$0.00',
+            's3-cost': '$0.00',
+            'transfer-cost': '$0.00'
+        };
+
+        Object.entries(metricsElements).forEach(([id, value]) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = value;
+            }
+        });
+
+        // Update cost chart with zero cost
+        this.updateCostChartWithRealCosts(0);
+
+        console.log('Default AWS status set');
     }
 
     async loadS3Status() {

@@ -1,7 +1,7 @@
 // Lunora Player - Multi-Destination Streaming Management
 class MultiDestinationManager {
     constructor() {
-        this.apiBaseUrl = 'http://localhost:3000/api';
+        this.apiBaseUrl = 'https://hi2pfpdbrlcry5w73wt27xrniu0vhykl.lambda-url.us-west-2.on.aws/api';
         this.destinations = [];
         this.presets = [];
         this.streamingStatus = {
@@ -10,7 +10,7 @@ class MultiDestinationManager {
             activeDestinations: []
         };
         this.refreshInterval = null;
-        
+
         this.init();
     }
 
@@ -124,6 +124,9 @@ class MultiDestinationManager {
                         <button class="btn-small btn-secondary" onclick="multiDestination.editDestination('${destination.destination_id}')">
                             ⚙️ Edit
                         </button>
+                        <button class="btn-small btn-danger" onclick="multiDestination.deleteDestination('${destination.destination_id}')">
+                            🗑️ Delete
+                        </button>
                     </div>
                 </div>
                 
@@ -224,7 +227,7 @@ class MultiDestinationManager {
                     <button class="close-btn" onclick="multiDestination.closeModal('${modalId}')">&times;</button>
                 </div>
                 
-                <form id="destination-form" onsubmit="multiDestination.saveDestination(event, ${isEdit})">
+                <form id="destination-form">
                     <div class="form-group">
                         <label for="dest-name">Destination Name *</label>
                         <input type="text" id="dest-name" name="name" required 
@@ -234,8 +237,9 @@ class MultiDestinationManager {
                     
                     <div class="form-group">
                         <label for="dest-platform">Platform *</label>
-                        <select id="dest-platform" name="platform" required onchange="multiDestination.onPlatformChange()">
+                        <select id="dest-platform" name="platform" required>
                             <option value="">Select Platform</option>
+                            <option value="hls" ${destination?.platform === 'hls' ? 'selected' : ''}>HLS Player</option>
                             <option value="youtube" ${destination?.platform === 'youtube' ? 'selected' : ''}>YouTube Live</option>
                             <option value="x" ${destination?.platform === 'x' ? 'selected' : ''}>X (Twitter) Live</option>
                             <option value="linkedin" ${destination?.platform === 'linkedin' ? 'selected' : ''}>LinkedIn Live</option>
@@ -253,6 +257,7 @@ class MultiDestinationManager {
                     <div class="form-group">
                         <label for="dest-stream-key">Stream Key *</label>
                         <input type="password" id="dest-stream-key" name="stream_key" required
+                               value="${destination?.stream_key || ''}"
                                placeholder="Enter your stream key">
                         <small>Stream keys are encrypted and stored securely</small>
                     </div>
@@ -286,55 +291,87 @@ class MultiDestinationManager {
             </div>
         `;
         
-        // Set up platform change handler
+        // Set up event handlers after modal is added to DOM
         setTimeout(() => {
+            this.setupModalEventHandlers(isEdit);
             this.onPlatformChange();
-            this.loadPresetsIntoSelect();
+            this.loadPresetsIntoSelect(destination);
         }, 100);
-        
+
         return modal;
+    }
+
+    setupModalEventHandlers(isEdit) {
+        const form = document.getElementById('destination-form');
+        const platformSelect = document.getElementById('dest-platform');
+
+        if (form) {
+            form.addEventListener('submit', (event) => {
+                this.saveDestination(event, isEdit);
+            });
+        }
+
+        if (platformSelect) {
+            platformSelect.addEventListener('change', () => {
+                this.onPlatformChange();
+            });
+        }
     }
 
     onPlatformChange() {
         const platformSelect = document.getElementById('dest-platform');
         const rtmpUrlGroup = document.getElementById('rtmp-url-group');
         const rtmpUrlInput = document.getElementById('dest-rtmp-url');
-        
+        const streamKeyGroup = document.getElementById('dest-stream-key')?.closest('.form-group');
+        const streamKeyInput = document.getElementById('dest-stream-key');
+
         if (platformSelect.value === 'custom') {
             rtmpUrlGroup.style.display = 'block';
             rtmpUrlInput.required = true;
+            if (streamKeyGroup) streamKeyGroup.style.display = 'block';
+            if (streamKeyInput) streamKeyInput.required = true;
+        } else if (platformSelect.value === 'hls') {
+            // HLS Player doesn't need RTMP URL or stream key
+            rtmpUrlGroup.style.display = 'none';
+            rtmpUrlInput.required = false;
+            if (streamKeyGroup) streamKeyGroup.style.display = 'none';
+            if (streamKeyInput) streamKeyInput.required = false;
+            rtmpUrlInput.value = '';
         } else {
             rtmpUrlGroup.style.display = 'none';
             rtmpUrlInput.required = false;
-            
+            if (streamKeyGroup) streamKeyGroup.style.display = 'block';
+            if (streamKeyInput) streamKeyInput.required = true;
+
             // Set default RTMP URLs for platforms
             const defaultUrls = {
                 youtube: 'rtmp://a.rtmp.youtube.com/live2',
                 x: 'rtmp://live-api-s.twitter.com/live',
                 linkedin: 'rtmp://1-publish.linkedin.com/live'
             };
-            
+
             rtmpUrlInput.value = defaultUrls[platformSelect.value] || '';
         }
-        
+
         this.loadPresetsIntoSelect();
     }
 
-    loadPresetsIntoSelect() {
+    loadPresetsIntoSelect(destination = null) {
         const platformSelect = document.getElementById('dest-platform');
         const presetSelect = document.getElementById('dest-preset');
-        
+
         if (!platformSelect || !presetSelect) return;
-        
+
         const platform = platformSelect.value;
         presetSelect.innerHTML = '<option value="">Select Preset</option>';
-        
+
         if (platform) {
             const platformPresets = this.presets.filter(p => p.platform === platform);
             platformPresets.forEach(preset => {
                 const option = document.createElement('option');
                 option.value = preset.preset_id;
                 option.textContent = preset.name;
+                option.selected = destination && destination.preset_id === preset.preset_id;
                 presetSelect.appendChild(option);
             });
         }
@@ -495,12 +532,36 @@ class MultiDestinationManager {
                 this.showSuccess('Destination started successfully');
                 await this.loadStreamingStatus();
                 this.updateDestinationStatus(destinationId, 'streaming');
+
+                // If this is an HLS destination, open the HLS player
+                const destination = this.destinations.find(d => d.destination_id === destinationId);
+                if (destination && destination.platform === 'hls') {
+                    this.openHLSPlayer();
+                }
             } else {
                 this.showError(result.message);
             }
         } catch (error) {
             console.error('Error starting destination:', error);
             this.showError('Failed to start destination');
+        }
+    }
+
+    openHLSPlayer() {
+        // Open HLS player in a new window/tab
+        const playerUrl = 'hls-player.html';
+        const playerWindow = window.open(
+            playerUrl,
+            'hlsPlayer',
+            'width=1200,height=800,scrollbars=yes,resizable=yes,toolbar=no,menubar=no,location=no,status=no'
+        );
+
+        if (playerWindow) {
+            playerWindow.focus();
+            this.showSuccess('HLS Player opened in new window');
+        } else {
+            // Fallback if popup blocked
+            window.open(playerUrl, '_blank');
         }
     }
 

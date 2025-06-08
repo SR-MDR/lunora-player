@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunora HLS Player - Live Stream</title>
+    <link rel="stylesheet" href="css/player.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.14/dist/hls.min.js"></script>
+    <style>
+        /* Additional styles for dedicated HLS player */
+        .app-container {
+            max-width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .app-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .app-header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        
+        .header-controls {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .player-container {
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .video-wrapper {
+            position: relative;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .video-wrapper video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .stream-url-display {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 1rem;
+            margin: 1rem 0;
+            font-family: monospace;
+            font-size: 0.9rem;
+            word-break: break-all;
+        }
+        
+        .stream-url-display strong {
+            color: #495057;
+        }
+        
+        .auto-play-notice {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 1rem;
+            margin: 1rem 0;
+            color: #856404;
+        }
+        
+        .stream-controls {
+            display: flex;
+            gap: 1rem;
+            margin: 1rem 0;
+            flex-wrap: wrap;
+        }
+        
+        .stream-controls button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s ease;
+        }
+        
+        .stream-controls button:hover {
+            background: #0056b3;
+        }
+        
+        .stream-controls button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <h1>🎬 Lunora HLS Player</h1>
+            <div class="header-controls">
+                <button id="fullscreen-toggle" class="control-btn">⛶ Fullscreen</button>
+                <button id="settings-toggle" class="control-btn">⚙️ Audio/Captions</button>
+                <button onclick="window.close()" class="control-btn">✕ Close</button>
+            </div>
+        </header>
+
+        <main class="player-container">
+            <div class="video-wrapper" id="video-wrapper">
+                <video
+                    id="video-player"
+                    controls
+                    preload="metadata"
+                    crossorigin="anonymous"
+                    autoplay
+                    muted>
+                    <p>Your browser doesn't support HTML5 video.</p>
+                </video>
+                
+                <!-- Loading indicator -->
+                <div class="loading-indicator" id="loading-indicator">
+                    <div class="spinner"></div>
+                    <p>Loading live stream...</p>
+                </div>
+
+                <!-- Error message -->
+                <div class="error-message" id="error-message" style="display: none;">
+                    <h3>Playback Error</h3>
+                    <p id="error-text"></p>
+                    <button id="retry-btn" class="retry-btn">Retry</button>
+                </div>
+            </div>
+
+            <!-- Stream Information -->
+            <div class="stream-url-display">
+                <strong>Live Stream URL:</strong><br>
+                <span id="current-stream-url">Loading...</span>
+            </div>
+
+            <div class="auto-play-notice">
+                <strong>Note:</strong> This stream will auto-play when available. If you don't see video, the stream may not be active yet.
+            </div>
+
+            <div class="stream-controls">
+                <button id="reload-stream">🔄 Reload Stream</button>
+                <button id="toggle-mute">🔊 Unmute</button>
+                <button id="toggle-play">▶️ Play</button>
+            </div>
+
+            <!-- Language Selection Panel -->
+            <div class="language-panel" id="language-panel" style="display: none;">
+                <div class="panel-content">
+                    <h3>Audio & Caption Settings</h3>
+                    
+                    <div class="language-group">
+                        <label for="audio-select">Audio Language:</label>
+                        <select id="audio-select">
+                            <option value="">Select Audio Language</option>
+                        </select>
+                    </div>
+                    
+                    <div class="language-group">
+                        <label for="subtitle-select">Captions/Subtitles:</label>
+                        <select id="subtitle-select">
+                            <option value="">No Captions</option>
+                        </select>
+                    </div>
+                    
+                    <div class="panel-actions">
+                        <button id="apply-languages" class="apply-btn">Apply Changes</button>
+                        <button id="close-panel" class="close-btn">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stream Information -->
+            <section class="stream-info" id="stream-info" style="display: block;">
+                <h3>Stream Information</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <label>Status:</label>
+                        <span id="stream-status">Loading...</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Quality:</label>
+                        <span id="stream-quality">Auto</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Audio Tracks:</label>
+                        <span id="audio-tracks-count">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Subtitle Tracks:</label>
+                        <span id="subtitle-tracks-count">-</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // HLS Player Configuration for Production
+        const HLS_STREAM_URL = 'https://dce3793146fef017.mediapackage.us-west-2.amazonaws.com/out/v1/ab090a5ad83f4d26b3ae8a23f3512081/index.m3u8';
+        
+        // Initialize player when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('current-stream-url').textContent = HLS_STREAM_URL;
+            initializeHLSPlayer();
+        });
+        
+        let hls = null;
+        let video = null;
+        
+        function initializeHLSPlayer() {
+            video = document.getElementById('video-player');
+            
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 90,
+                    maxBufferLength: 30
+                });
+                
+                hls.loadSource(HLS_STREAM_URL);
+                hls.attachMedia(video);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    console.log('HLS manifest loaded');
+                    document.getElementById('loading-indicator').style.display = 'none';
+                    document.getElementById('stream-status').textContent = 'Ready';
+                    
+                    // Auto-play (muted initially for browser policies)
+                    video.play().catch(e => {
+                        console.log('Auto-play prevented:', e);
+                        document.getElementById('stream-status').textContent = 'Ready (Click Play)';
+                    });
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.error('HLS Error:', data);
+                    if (data.fatal) {
+                        document.getElementById('error-message').style.display = 'block';
+                        document.getElementById('error-text').textContent = 'Stream error: ' + data.details;
+                        document.getElementById('stream-status').textContent = 'Error';
+                    }
+                });
+                
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari)
+                video.src = HLS_STREAM_URL;
+                document.getElementById('loading-indicator').style.display = 'none';
+                document.getElementById('stream-status').textContent = 'Ready';
+            } else {
+                document.getElementById('error-message').style.display = 'block';
+                document.getElementById('error-text').textContent = 'HLS is not supported in this browser';
+            }
+        }
+        
+        // Control button handlers
+        document.getElementById('fullscreen-toggle').addEventListener('click', function() {
+            const videoWrapper = document.getElementById('video-wrapper');
+            if (videoWrapper.requestFullscreen) {
+                videoWrapper.requestFullscreen();
+            } else if (videoWrapper.webkitRequestFullscreen) {
+                videoWrapper.webkitRequestFullscreen();
+            }
+        });
+        
+        document.getElementById('reload-stream').addEventListener('click', function() {
+            if (hls) {
+                hls.destroy();
+            }
+            document.getElementById('loading-indicator').style.display = 'block';
+            initializeHLSPlayer();
+        });
+        
+        document.getElementById('toggle-mute').addEventListener('click', function() {
+            if (video) {
+                video.muted = !video.muted;
+                this.textContent = video.muted ? '🔇 Unmute' : '🔊 Mute';
+            }
+        });
+        
+        document.getElementById('toggle-play').addEventListener('click', function() {
+            if (video) {
+                if (video.paused) {
+                    video.play();
+                    this.textContent = '⏸️ Pause';
+                } else {
+                    video.pause();
+                    this.textContent = '▶️ Play';
+                }
+            }
+        });
+        
+        // Settings panel toggle
+        document.getElementById('settings-toggle').addEventListener('click', function() {
+            const panel = document.getElementById('language-panel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        document.getElementById('close-panel').addEventListener('click', function() {
+            document.getElementById('language-panel').style.display = 'none';
+        });
+    </script>
+</body>
+</html>
