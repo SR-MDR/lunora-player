@@ -62,15 +62,51 @@ OBS → MediaLive ──┬─→ MediaPackage → HLS Player (CloudFront) [UNCH
 
 ### **Phase 2: Lambda Integration**
 1. **MediaConnect Manager**: Lambda function for flow management
-2. **API Updates**: Integrate MediaConnect operations with existing API
-3. **Database Schema**: Track MediaConnect output ARNs
-4. **Error Handling**: Robust error handling for MediaConnect operations
+2. **Source Management API**: Create endpoints for admin source configuration
+3. **API Updates**: Integrate MediaConnect operations with existing API
+4. **Database Schema**: Add sources table and track MediaConnect output ARNs
+5. **Error Handling**: Robust error handling for MediaConnect operations
+6. **Status Synchronization**: Real-time sync between MediaConnect and database
 
 ### **Phase 3: Frontend Updates**
-1. **UI Enhancements**: Real-time destination management
-2. **Status Indicators**: Show MediaConnect flow status
-3. **Granular Controls**: Individual destination start/stop buttons
-4. **Error Feedback**: User-friendly error messages
+1. **Admin Dashboard Integration**: Add source management to Admin Dashboard
+2. **Producer Interface Enhancements**: Real-time destination management
+3. **Status Indicators**: Show MediaConnect flow status
+4. **Granular Controls**: Individual destination start/stop buttons
+5. **Error Feedback**: User-friendly error messages
+
+## 🖥️ **User Interface Architecture**
+
+### **Admin Dashboard Integration**
+
+#### **Source Management (Admin Dashboard)**
+**URL**: `https://admin.yourdomain.com/sources`
+**User Role**: Administrators only
+
+**Key Features:**
+- **Multi-Protocol Support**: Configure SRT (Videon), RTMP (OBS), RTP, NDI sources
+- **Primary/Backup Configuration**: Set source priorities and failover rules
+- **Connection Testing**: Validate source connectivity before deployment
+- **Health Monitoring**: Real-time source quality and connection status
+- **MediaLive Integration**: Automatic input security group and channel configuration
+- **Manual Override Controls**: Emergency source switching capabilities
+
+#### **Producer Interface (Destination Management)**
+**URL**: `https://streaming.yourdomain.com`
+**User Role**: Producers, content creators
+
+**Key Features:**
+- **Source Selection**: Choose from admin-configured sources
+- **Destination Management**: Add/edit RTMP destinations with backup URLs
+- **Granular Control**: Individual destination start/stop
+- **Real-time Status**: Live monitoring of all destinations
+- **Backup URL Configuration**: Optional backup RTMP destinations per platform
+
+### **Role Separation Benefits**
+- ✅ **Admin Focus**: Infrastructure and source management
+- ✅ **Producer Focus**: Content creation and destination control
+- ✅ **Security**: Clear separation of technical vs operational concerns
+- ✅ **Scalability**: Admins configure once, producers use repeatedly
 
 ## 🏛️ **Technical Architecture**
 
@@ -103,6 +139,34 @@ Outputs: [Dynamic - Managed by Lambda]
 
 ### **Database Schema Updates**
 ```yaml
+Sources Table (lunora-sources): [NEW]
+  Primary Fields:
+    - source_id: Unique identifier
+    - name: Display name (e.g., "Videon Edge A")
+    - protocol: SRT, RTMP, RTP, NDI
+    - connection_url: Full connection string
+    - priority: 1=Primary, 2=Backup, 3=Emergency
+    - enabled: Boolean status
+
+  Configuration Fields:
+    - host_ip: Source IP address
+    - port: Connection port
+    - stream_id: Protocol-specific stream identifier
+    - encryption_type: None, AES-128, AES-256
+    - health_check_enabled: Boolean
+    - health_check_interval: Seconds
+
+  MediaLive Integration:
+    - medialive_input_id: Associated MediaLive input
+    - input_security_group_id: AWS security group
+    - input_class: STANDARD, SINGLE_PIPELINE
+
+  Status Fields:
+    - health_status: HEALTHY, DEGRADED, FAILED
+    - last_health_check: Timestamp
+    - connection_attempts: Counter
+    - created_at, updated_at: Timestamps
+
 Destinations Table (lunora-destinations):
   Existing Fields: [UNCHANGED]
     - destination_id
@@ -112,7 +176,12 @@ Destinations Table (lunora-destinations):
     - created_at, updated_at
 
   New Fields: [ADD]
+    - backup_rtmp_url: Optional backup URL
+    - backup_stream_key_param: Optional backup stream key
+    - failover_enabled: Boolean
+    - current_active_url: 'primary' | 'backup'
     - mediaconnect_output_arn: MediaConnect output ARN
+    - mediaconnect_backup_output_arn: Optional backup output ARN
     - output_type: 'medialive' | 'mediaconnect'
     - last_mediaconnect_sync: Timestamp
 ```

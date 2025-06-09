@@ -457,9 +457,19 @@ Certificate Configuration:
 **Purpose**: Simplified interface for content creators and operators
 **Access Level**: Stream configuration and basic monitoring only
 
-#### **3. Admin Interface (`admin.yourdomain.com`) - Administrator Role**
-**Purpose**: Complete system administration and monitoring
-**Access Level**: Full system control, user management, and analytics
+#### **3. Admin Dashboard (`admin.yourdomain.com`) - Administrator Role**
+**Purpose**: Complete system administration, source management, and monitoring
+**Access Level**: Full system control, source configuration, user management, and analytics
+
+**Key Admin Features:**
+- **Source Management**: Configure input sources (SRT, RTMP, etc.)
+- **MediaLive Channel Control**: Channel configuration and monitoring
+- **Input Source Configuration**: Videon Edge Nodes, OBS, hardware encoders
+- **Failover Rules**: Configure automatic source switching logic
+- **User Management**: Producer access control and permissions
+- **System Health Monitoring**: Infrastructure status and alerts
+- **Cost Monitoring**: AWS service usage and billing alerts
+- **Security Configuration**: Parameter Store, encryption, access policies
 
 ### **User Interface Components (Operator Role)**
 
@@ -550,7 +560,7 @@ Certificate Configuration:
 │ └── 🟡 Costs: $127 (85% of budget)                         │
 │                                                             │
 │ Quick Actions:                                              │
-│ [👥 Manage Users] [🎛️ System Config] [📊 Analytics]        │
+│ [� Source Management] [�👥 Manage Users] [🎛️ System Config] │
 │ [🔧 Diagnostics] [💰 Cost Analysis] [📋 Session Logs]      │
 │                                                             │
 │ Recent Alerts:                                              │
@@ -639,6 +649,76 @@ Certificate Configuration:
 │ └── Other Services: $6.20 (5%)                            │
 │                                                             │
 │ [📈 Detailed Analytics] [⚠️ Set Alerts] [📋 Generate Report]│
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### **2. Source Management Interface (`admin.yourdomain.com/sources`)**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 📡 Source Management - Admin Dashboard     [Back to Main]  │
+├─────────────────────────────────────────────────────────────┤
+│ Input Sources Configuration:                                │
+│                                                             │
+│ Primary Sources:                                            │
+│ ├── 🟢 Videon Edge A (SRT)    [Edit] [Test] [Set Primary]  │
+│ │   └── srt://10.0.1.100:9998?mode=caller                  │
+│ ├── 🟡 Videon Edge B (SRT)    [Edit] [Test] [Set Backup]   │
+│ │   └── srt://10.0.1.101:9998?mode=caller                  │
+│ └── 🔴 OBS Studio (RTMP)      [Edit] [Test] [Enable]       │
+│     └── rtmp://input.medialive.aws.com/live/obs-backup     │
+│                                                             │
+│ Failover Configuration:                                     │
+│ ├── Auto Failover: [✓] Enabled                            │
+│ ├── Failover Threshold: [5] seconds                       │
+│ ├── Manual Override: [✓] Allowed                          │
+│ └── Health Check Interval: [30] seconds                   │
+│                                                             │
+│ MediaLive Channel Status:                                   │
+│ ├── Channel ID: 3714710 (lunora-player-prod-obs-rtmp)     │
+│ ├── Current Input: Videon Edge A (Primary)                │
+│ ├── Input Security Groups: 3 configured                   │
+│ └── Channel State: RUNNING                                 │
+│                                                             │
+│ [+ Add New Source] [Import Config] [Export Config]        │
+│ [Test All Sources] [Apply Changes] [Reset to Defaults]    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### **3. Source Configuration Dialog**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ⚙️ Configure Input Source                    [Save] [Cancel] │
+├─────────────────────────────────────────────────────────────┤
+│ Source Details:                                             │
+│ ├── Name: [Videon Edge Node A                            ] │
+│ ├── Type: [SRT Caller     ▼] (SRT/RTMP/RTP/NDI)          │
+│ ├── Priority: [1] (1=Primary, 2=Backup, 3=Emergency)     │
+│ └── Enabled: [✓] Active                                   │
+│                                                             │
+│ Connection Settings:                                        │
+│ ├── Host/IP: [10.0.1.100                                ] │
+│ ├── Port: [9998                                         ] │
+│ ├── Protocol: [SRT                                      ] │
+│ └── Mode: [Caller    ▼] (Caller/Listener)                │
+│                                                             │
+│ SRT Specific Settings:                                      │
+│ ├── Latency: [200] ms                                     │
+│ ├── Encryption: [None     ▼] (None/AES-128/AES-256)      │
+│ ├── Passphrase: [                                       ] │
+│ └── Stream ID: [lunora-primary                          ] │
+│                                                             │
+│ Health Monitoring:                                          │
+│ ├── Health Check: [✓] Enabled                             │
+│ ├── Check Interval: [30] seconds                          │
+│ ├── Timeout: [10] seconds                                 │
+│ └── Retry Count: [3] attempts                             │
+│                                                             │
+│ MediaLive Integration:                                      │
+│ ├── Input Security Group: [sg-12345678  ▼]               │
+│ ├── Input Class: [STANDARD    ▼]                         │
+│ └── Auto-create Input: [✓] Yes                           │
+│                                                             │
+│ [Test Connection] [Advanced Settings] [Save] [Cancel]     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
