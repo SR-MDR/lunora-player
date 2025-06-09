@@ -490,6 +490,126 @@
 }
 
 /* ============================================================================
+   MEDIALIVE CHANNEL STATUS
+   ============================================================================ */
+
+.channel-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.channel-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    transition: all 0.3s ease;
+}
+
+.channel-status[data-state="IDLE"] .channel-indicator {
+    background: #6c757d;
+}
+
+.channel-status[data-state="STARTING"] .channel-indicator {
+    background: #ffc107;
+    animation: pulse-starting 1.5s infinite;
+}
+
+.channel-status[data-state="RUNNING"] .channel-indicator {
+    background: #28a745;
+    animation: pulse-running 2s infinite;
+}
+
+.channel-status[data-state="STOPPING"] .channel-indicator {
+    background: #fd7e14;
+    animation: pulse-stopping 1s infinite;
+}
+
+.channel-status[data-state="ERROR"] .channel-indicator {
+    background: #dc3545;
+    animation: blink 0.5s infinite;
+}
+
+.channel-status[data-state="unknown"] .channel-indicator {
+    background: #adb5bd;
+    animation: pulse-loading 1s infinite;
+}
+
+@keyframes pulse-starting {
+    0%, 100% {
+        opacity: 0.6;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.2);
+    }
+}
+
+@keyframes pulse-running {
+    0%, 100% {
+        opacity: 0.8;
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.4);
+    }
+    50% {
+        opacity: 1;
+        box-shadow: 0 0 0 4px rgba(40, 167, 69, 0.1);
+    }
+}
+
+@keyframes pulse-stopping {
+    0%, 100% {
+        opacity: 0.7;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(0.8);
+    }
+}
+
+@keyframes pulse-loading {
+    0%, 100% {
+        opacity: 0.4;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+.channel-text {
+    font-size: 0.85rem;
+    text-transform: capitalize;
+}
+
+.channel-status[data-state="IDLE"] .channel-text {
+    color: #6c757d;
+}
+
+.channel-status[data-state="STARTING"] .channel-text {
+    color: #856404;
+}
+
+.channel-status[data-state="RUNNING"] .channel-text {
+    color: #155724;
+    font-weight: 600;
+}
+
+.channel-status[data-state="STOPPING"] .channel-text {
+    color: #833c0c;
+}
+
+.channel-status[data-state="ERROR"] .channel-text {
+    color: #721c24;
+}
+
+.channel-status[data-state="unknown"] .channel-text {
+    color: #6c757d;
+}
+
+/* ============================================================================
    RESPONSIVE DESIGN
    ============================================================================ */
 

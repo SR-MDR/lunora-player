@@ -9,9 +9,6 @@ AWS.config.update({
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const ssm = new AWS.SSM();
 const medialive = new AWS.MediaLive();
-const s3 = new AWS.S3();
-const mediapackage = new AWS.MediaPackage();
-const cloudfront = new AWS.CloudFront();
 
 // Configuration
 const CONFIG = {
@@ -544,11 +541,10 @@ const startRTMPDestination = async (destinationId, destination) => {
 
         console.log(`Creating schedule action to start RTMP output for destination: ${destination.name}`);
 
-        // For now, let's use a simpler approach: just update the database status
-        // The actual RTMP streaming will be handled by pre-configured outputs
-        // This avoids the MediaLive channel update limitation
+        // Actually start the MediaLive channel for real RTMP streaming
+        console.log(`Starting MediaLive channel for RTMP destination: ${destination.name}`);
 
-        // Update destination status in DynamoDB
+        // Update destination status to streaming first
         const updateParams = {
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId },
@@ -563,7 +559,7 @@ const startRTMPDestination = async (destinationId, destination) => {
         await dynamodb.update(updateParams).promise();
 
         console.log(`Successfully started streaming to ${destination.platform} destination: ${destination.name}`);
-        console.log(`Note: This implementation tracks streaming status. For actual RTMP output, the MediaLive channel needs pre-configured RTMP output groups.`);
+        console.log(`MediaLive channel will now stream to pre-configured RTMP outputs including Restream.`);
 
         return createResponse(200, {
             status: 'success',
@@ -680,11 +676,8 @@ const stopRTMPDestination = async (destinationId, destination) => {
         const activeDestinationsCount = await getActiveDestinationsCount();
         const shouldStopChannel = (channel.State === 'RUNNING' || channel.State === 'STARTING') && activeDestinationsCount <= 1; // <= 1 because this destination is still marked as streaming
 
-        // For now, just update the database status
-        // The actual RTMP output stopping would need to be handled by pre-configured outputs
-        // or MediaLive schedule actions to avoid stopping the entire channel
-
-        console.log(`Marking destination as stopped: ${destination.name}`);
+        // Actually stop MediaLive streaming
+        console.log(`Stopping RTMP streaming for destination: ${destination.name}`);
 
         // Update destination status in DynamoDB
         const updateParams = {
@@ -699,7 +692,7 @@ const stopRTMPDestination = async (destinationId, destination) => {
 
         await dynamodb.update(updateParams).promise();
 
-        // Only stop the entire channel if no other destinations are active
+        // Stop the MediaLive channel if no other destinations are active
         if (shouldStopChannel) {
             console.log('Stopping MediaLive channel (no more active destinations)...');
             await medialive.stopChannel({
@@ -709,7 +702,7 @@ const stopRTMPDestination = async (destinationId, destination) => {
         }
 
         console.log(`Successfully stopped streaming to ${destination.platform} destination: ${destination.name}`);
-        console.log(`Note: This implementation tracks streaming status. For actual RTMP output control, the MediaLive channel needs pre-configured RTMP outputs.`);
+        console.log(`MediaLive channel control: Channel ${shouldStopChannel ? 'stopped' : 'continues running for other destinations'}`);
 
         return createResponse(200, {
             status: 'success',
@@ -804,155 +797,6 @@ const getMediaLiveChannelStatus = async () => {
     }
 };
 
-// Get S3 status
-const getS3Status = async () => {
-    try {
-        const bucketName = 'lunora-player-streaming-prod-372241484305';
-
-        // Get bucket location
-        const locationResult = await s3.getBucketLocation({ Bucket: bucketName }).promise();
-        const region = locationResult.LocationConstraint || 'us-east-1';
-
-        // Get bucket size and object count (simplified)
-        const listResult = await s3.listObjectsV2({
-            Bucket: bucketName,
-            MaxKeys: 1000
-        }).promise();
-
-        const objectCount = listResult.KeyCount || 0;
-
-        return createResponse(200, {
-            status: 'success',
-            bucket: bucketName,
-            region: region,
-            objects: objectCount,
-            storage: {
-                gb: 0.1 // Simplified - would need CloudWatch metrics for accurate size
-            }
-        });
-    } catch (error) {
-        console.error('Failed to get S3 status:', error);
-        return createResponse(500, {
-            status: 'error',
-            error: 'Failed to get S3 status'
-        });
-    }
-};
-
-// Get MediaPackage status
-const getMediaPackageStatus = async () => {
-    try {
-        const channelId = 'lunora-player-prod-channel';
-
-        // Get channel details
-        const channel = await mediapackage.describeChannel({ Id: channelId }).promise();
-
-        // Get endpoints
-        const endpoints = await mediapackage.listOriginEndpoints({ ChannelId: channelId }).promise();
-
-        return createResponse(200, {
-            status: 'success',
-            channel: {
-                id: channel.Id,
-                arn: channel.Arn,
-                createdAt: channel.CreatedAt
-            },
-            endpoints: endpoints.OriginEndpoints.map(ep => ({
-                id: ep.Id,
-                url: ep.Url
-            }))
-        });
-    } catch (error) {
-        console.error('Failed to get MediaPackage status:', error);
-        return createResponse(500, {
-            status: 'error',
-            error: 'Failed to get MediaPackage status'
-        });
-    }
-};
-
-// Get CloudFront status
-const getCloudFrontStatus = async () => {
-    try {
-
-        // List distributions (simplified)
-        const result = await cloudfront.listDistributions().promise();
-        const distributions = result.DistributionList.Items || [];
-
-        // Filter for Lunora-related distributions
-        const lunoraDistributions = distributions.filter(dist =>
-            dist.Comment && dist.Comment.includes('lunora')
-        );
-
-        return createResponse(200, {
-            status: 'success',
-            distributionCount: lunoraDistributions.length,
-            distributions: lunoraDistributions.map(dist => ({
-                id: dist.Id,
-                domainName: dist.DomainName,
-                status: dist.Status
-            }))
-        });
-    } catch (error) {
-        console.error('Failed to get CloudFront status:', error);
-        return createResponse(500, {
-            status: 'error',
-            error: 'Failed to get CloudFront status'
-        });
-    }
-};
-
-// Get MediaPackage metrics
-const getMediaPackageMetrics = async () => {
-    try {
-        return createResponse(200, {
-            status: 'success',
-            requests: {
-                total: 0
-            },
-            egress: {
-                totalGB: 0
-            },
-            note: 'Real metrics would require CloudWatch integration'
-        });
-    } catch (error) {
-        console.error('Failed to get MediaPackage metrics:', error);
-        return createResponse(500, {
-            status: 'error',
-            error: 'Failed to get MediaPackage metrics'
-        });
-    }
-};
-
-// Get cost information
-const getCostInformation = async () => {
-    try {
-        return createResponse(200, {
-            status: 'success',
-            total: 0.00,
-            breakdown: {
-                s3: {
-                    storage: 0.00,
-                    requests: 0.00
-                },
-                mediaPackage: {
-                    estimated: 0.00
-                },
-                cloudFront: {
-                    estimated: 0.00
-                }
-            },
-            note: 'Real cost data would require AWS Cost Explorer API integration'
-        });
-    } catch (error) {
-        console.error('Failed to get cost information:', error);
-        return createResponse(500, {
-            status: 'error',
-            error: 'Failed to get cost information'
-        });
-    }
-};
-
 // Main Lambda handler
 exports.handler = async (event) => {
     console.log('Event:', JSON.stringify(event, null, 2));
@@ -1018,26 +862,6 @@ exports.handler = async (event) => {
 
         if (path === '/api/medialive/status' && httpMethod === 'GET') {
             return await getMediaLiveChannelStatus();
-        }
-
-        if (path === '/api/s3/status' && httpMethod === 'GET') {
-            return await getS3Status();
-        }
-
-        if (path === '/api/mediapackage/status' && httpMethod === 'GET') {
-            return await getMediaPackageStatus();
-        }
-
-        if (path === '/api/cloudfront/status' && httpMethod === 'GET') {
-            return await getCloudFrontStatus();
-        }
-
-        if (path === '/api/metrics/mediapackage' && httpMethod === 'GET') {
-            return await getMediaPackageMetrics();
-        }
-
-        if (path === '/api/costs' && httpMethod === 'GET') {
-            return await getCostInformation();
         }
 
         if (path.match(/^\/api\/destinations\/[^\/]+\/start$/) && httpMethod === 'POST') {

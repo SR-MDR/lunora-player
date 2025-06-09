@@ -84,7 +84,9 @@ create_function() {
             DESTINATIONS_TABLE=lunora-destinations,
             PRESETS_TABLE=lunora-presets,
             SESSIONS_TABLE=lunora-streaming-sessions,
-            PARAMETER_STORE_PREFIX=/lunora-player/streaming
+            PARAMETER_STORE_PREFIX=/lunora-player/streaming,
+            MEDIALIVE_CHANNEL_ID=3714710,
+            MEDIALIVE_REGION=us-west-2
         }" \
         --region "$AWS_REGION" \
         --profile "$AWS_PROFILE"
