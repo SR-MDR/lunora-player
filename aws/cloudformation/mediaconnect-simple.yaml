@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lunora Player - Simple MediaConnect Flow for Testing'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'lunora-player'
+    Description: 'Name of the project for resource naming'
+  
+  Environment:
+    Type: String
+    Default: 'prod'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+
+Resources:
+  # MediaConnect Flow for RTMP Routing
+  RTMPRouterFlow:
+    Type: AWS::MediaConnect::Flow
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-rtmp-router'
+      AvailabilityZone: !Sub '${AWS::Region}a'
+      Source:
+        Name: !Sub '${ProjectName}-medialive-source'
+        Description: 'Source from MediaLive channel'
+        Protocol: 'rtp-fec'
+        IngestPort: 5000
+        WhitelistCidr: '10.0.0.0/8'  # Allow MediaLive internal traffic
+        MaxBitrate: 50000000  # 50 Mbps max
+
+Outputs:
+  MediaConnectFlowArn:
+    Description: 'MediaConnect Flow ARN for RTMP routing'
+    Value: !GetAtt RTMPRouterFlow.FlowArn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-mediaconnect-flow-arn'
+  
+  MediaConnectFlowName:
+    Description: 'MediaConnect Flow Name'
+    Value: !Ref RTMPRouterFlow
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-mediaconnect-flow-name'
+  
+  MediaConnectSourceIngestUrl:
+    Description: 'MediaConnect Source Ingest URL for MediaLive'
+    Value: !Sub 
+      - 'rtp://${SourceIngestIp}:5000'
+      - SourceIngestIp: !GetAtt RTMPRouterFlow.Source.IngestIp
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-mediaconnect-ingest-url'

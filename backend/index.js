@@ -9,6 +9,7 @@ AWS.config.update({
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const ssm = new AWS.SSM();
 const medialive = new AWS.MediaLive();
+const mediaconnect = new AWS.MediaConnect();
 
 // Configuration
 const CONFIG = {
@@ -17,7 +18,8 @@ const CONFIG = {
     dynamodb: {
         destinationsTable: process.env.DESTINATIONS_TABLE || 'lunora-destinations',
         presetsTable: process.env.PRESETS_TABLE || 'lunora-presets',
-        sessionsTable: process.env.SESSIONS_TABLE || 'lunora-streaming-sessions'
+        sessionsTable: process.env.SESSIONS_TABLE || 'lunora-streaming-sessions',
+        sourcesTable: process.env.SOURCES_TABLE || 'lunora-sources'
     },
     parameterStore: {
         prefix: process.env.PARAMETER_STORE_PREFIX || '/lunora-player/streaming'
@@ -25,6 +27,9 @@ const CONFIG = {
     medialive: {
         channelId: process.env.MEDIALIVE_CHANNEL_ID || '3714710',
         region: process.env.MEDIALIVE_REGION || 'us-west-2'
+    },
+    mediaconnect: {
+        flowArn: process.env.MEDIACONNECT_FLOW_ARN || null
     }
 };
 
@@ -119,6 +124,465 @@ const waitForChannelState = async (targetState, timeoutSeconds = 60) => {
     }
 
     throw new Error(`Timeout waiting for channel to reach state: ${targetState}`);
+};
+
+// ===== MEDIACONNECT INTEGRATION FUNCTIONS =====
+
+// Get MediaConnect flow details
+const getMediaConnectFlow = async () => {
+    try {
+        if (!CONFIG.mediaconnect.flowArn) {
+            throw new Error('MediaConnect Flow ARN not configured');
+        }
+
+        const result = await mediaconnect.describeFlow({
+            FlowArn: CONFIG.mediaconnect.flowArn
+        }).promise();
+
+        return result.Flow;
+    } catch (error) {
+        console.error('Failed to get MediaConnect flow:', error);
+        throw new Error('Failed to get MediaConnect flow details');
+    }
+};
+
+// Add RTMP output to MediaConnect flow
+const addMediaConnectOutput = async (destination) => {
+    try {
+        if (!CONFIG.mediaconnect.flowArn) {
+            throw new Error('MediaConnect Flow ARN not configured');
+        }
+
+        // Get stream key from Parameter Store
+        let streamKey = '';
+        if (destination.stream_key_param) {
+            streamKey = await getStreamKey(destination.stream_key_param);
+        }
+
+        if (!destination.rtmp_url) {
+            throw new Error('RTMP URL is required for MediaConnect output');
+        }
+
+        // Construct full RTMP URL with stream key
+        const fullRtmpUrl = streamKey ?
+            `${destination.rtmp_url}/${streamKey}` :
+            destination.rtmp_url;
+
+        const outputName = `rtmp-${destination.destination_id}`;
+
+        const addOutputParams = {
+            FlowArn: CONFIG.mediaconnect.flowArn,
+            Outputs: [{
+                Name: outputName,
+                Description: `RTMP output for ${destination.name} (${destination.platform})`,
+                Protocol: 'rtmp',
+                Destination: fullRtmpUrl,
+                Port: 1935,
+                MaxLatency: 2000,
+                SmoothingLatency: 0
+            }]
+        };
+
+        console.log(`Adding MediaConnect output for destination: ${destination.name}`);
+        const result = await mediaconnect.addFlowOutputs(addOutputParams).promise();
+
+        const outputArn = result.Outputs[0].OutputArn;
+        console.log(`MediaConnect output created with ARN: ${outputArn}`);
+
+        return outputArn;
+    } catch (error) {
+        console.error('Failed to add MediaConnect output:', error);
+        throw new Error(`Failed to add MediaConnect output: ${error.message}`);
+    }
+};
+
+// Remove RTMP output from MediaConnect flow
+const removeMediaConnectOutput = async (outputArn) => {
+    try {
+        if (!CONFIG.mediaconnect.flowArn) {
+            throw new Error('MediaConnect Flow ARN not configured');
+        }
+
+        const removeParams = {
+            FlowArn: CONFIG.mediaconnect.flowArn,
+            OutputArn: outputArn
+        };
+
+        console.log(`Removing MediaConnect output: ${outputArn}`);
+        await mediaconnect.removeFlowOutput(removeParams).promise();
+        console.log('MediaConnect output removed successfully');
+
+        return true;
+    } catch (error) {
+        console.error('Failed to remove MediaConnect output:', error);
+        throw new Error(`Failed to remove MediaConnect output: ${error.message}`);
+    }
+};
+
+// Update MediaConnect output
+const updateMediaConnectOutput = async (outputArn, destination) => {
+    try {
+        if (!CONFIG.mediaconnect.flowArn) {
+            throw new Error('MediaConnect Flow ARN not configured');
+        }
+
+        // Get stream key from Parameter Store
+        let streamKey = '';
+        if (destination.stream_key_param) {
+            streamKey = await getStreamKey(destination.stream_key_param);
+        }
+
+        // Construct full RTMP URL with stream key
+        const fullRtmpUrl = streamKey ?
+            `${destination.rtmp_url}/${streamKey}` :
+            destination.rtmp_url;
+
+        const updateParams = {
+            FlowArn: CONFIG.mediaconnect.flowArn,
+            OutputArn: outputArn,
+            Description: `RTMP output for ${destination.name} (${destination.platform})`,
+            Destination: fullRtmpUrl,
+            MaxLatency: 2000,
+            SmoothingLatency: 0
+        };
+
+        console.log(`Updating MediaConnect output: ${outputArn}`);
+        await mediaconnect.updateFlowOutput(updateParams).promise();
+        console.log('MediaConnect output updated successfully');
+
+        return true;
+    } catch (error) {
+        console.error('Failed to update MediaConnect output:', error);
+        throw new Error(`Failed to update MediaConnect output: ${error.message}`);
+    }
+};
+
+// List all MediaConnect outputs
+const listMediaConnectOutputs = async () => {
+    try {
+        if (!CONFIG.mediaconnect.flowArn) {
+            return [];
+        }
+
+        const flow = await getMediaConnectFlow();
+        return flow.Outputs || [];
+    } catch (error) {
+        console.error('Failed to list MediaConnect outputs:', error);
+        return [];
+    }
+};
+
+// Synchronize MediaConnect status with database
+const syncMediaConnectStatus = async () => {
+    try {
+        if (!CONFIG.mediaconnect.flowArn) {
+            console.log('MediaConnect not configured, skipping sync');
+            return;
+        }
+
+        const outputs = await listMediaConnectOutputs();
+        const outputMap = new Map();
+
+        outputs.forEach(output => {
+            // Extract destination ID from output name (format: rtmp-{destination_id})
+            const match = output.Name.match(/^rtmp-(.+)$/);
+            if (match) {
+                outputMap.set(match[1], output);
+            }
+        });
+
+        // Get all destinations from database
+        const result = await dynamodb.scan({
+            TableName: CONFIG.dynamodb.destinationsTable
+        }).promise();
+
+        // Update destinations with MediaConnect status
+        for (const destination of result.Items) {
+            const mediaConnectOutput = outputMap.get(destination.destination_id);
+
+            if (mediaConnectOutput && destination.streaming_status !== 'streaming') {
+                // MediaConnect output exists but database shows not streaming
+                await dynamodb.update({
+                    TableName: CONFIG.dynamodb.destinationsTable,
+                    Key: { destination_id: destination.destination_id },
+                    UpdateExpression: 'SET streaming_status = :status, mediaconnect_output_arn = :arn',
+                    ExpressionAttributeValues: {
+                        ':status': 'streaming',
+                        ':arn': mediaConnectOutput.OutputArn
+                    }
+                }).promise();
+            } else if (!mediaConnectOutput && destination.streaming_status === 'streaming' && destination.mediaconnect_output_arn) {
+                // Database shows streaming but no MediaConnect output exists
+                await dynamodb.update({
+                    TableName: CONFIG.dynamodb.destinationsTable,
+                    Key: { destination_id: destination.destination_id },
+                    UpdateExpression: 'SET streaming_status = :status REMOVE mediaconnect_output_arn',
+                    ExpressionAttributeValues: {
+                        ':status': 'ready'
+                    }
+                }).promise();
+            }
+        }
+
+        console.log('MediaConnect status synchronization completed');
+    } catch (error) {
+        console.error('Failed to sync MediaConnect status:', error);
+    }
+};
+
+// ===== SOURCE MANAGEMENT FUNCTIONS =====
+
+// Get all sources
+const getSources = async () => {
+    try {
+        const result = await dynamodb.scan({
+            TableName: CONFIG.dynamodb.sourcesTable
+        }).promise();
+
+        return createResponse(200, {
+            status: 'success',
+            sources: result.Items,
+            count: result.Items.length
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to fetch sources');
+    }
+};
+
+// Create new source
+const createSource = async (body) => {
+    try {
+        const {
+            name,
+            type,
+            input_url,
+            backup_url,
+            description,
+            enabled = true,
+            failover_enabled = false
+        } = JSON.parse(body);
+
+        if (!name || !type || !input_url) {
+            return createResponse(400, {
+                status: 'error',
+                message: 'Name, type, and input_url are required'
+            });
+        }
+
+        const source_id = `src_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const timestamp = new Date().toISOString();
+
+        const source = {
+            source_id,
+            name,
+            type, // 'srt', 'rtmp', 'rtp', 'udp'
+            input_url,
+            backup_url: backup_url || null,
+            description: description || '',
+            enabled,
+            failover_enabled,
+            status: 'ready', // 'ready', 'active', 'error', 'testing'
+            health_status: 'unknown', // 'healthy', 'degraded', 'unhealthy', 'unknown'
+            created_at: timestamp,
+            updated_at: timestamp,
+            last_tested_at: null,
+            connection_attempts: 0,
+            last_error: null
+        };
+
+        await dynamodb.put({
+            TableName: CONFIG.dynamodb.sourcesTable,
+            Item: source
+        }).promise();
+
+        return createResponse(200, {
+            status: 'success',
+            message: 'Source created successfully',
+            source: source
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to create source');
+    }
+};
+
+// Update source
+const updateSource = async (sourceId, body) => {
+    try {
+        const {
+            name,
+            type,
+            input_url,
+            backup_url,
+            description,
+            enabled,
+            failover_enabled
+        } = JSON.parse(body);
+
+        // Get existing source
+        const existing = await dynamodb.get({
+            TableName: CONFIG.dynamodb.sourcesTable,
+            Key: { source_id: sourceId }
+        }).promise();
+
+        if (!existing.Item) {
+            return createResponse(404, {
+                status: 'error',
+                message: 'Source not found'
+            });
+        }
+
+        const timestamp = new Date().toISOString();
+        const updates = {
+            updated_at: timestamp
+        };
+
+        // Update fields if provided
+        if (name !== undefined) updates.name = name;
+        if (type !== undefined) updates.type = type;
+        if (input_url !== undefined) updates.input_url = input_url;
+        if (backup_url !== undefined) updates.backup_url = backup_url;
+        if (description !== undefined) updates.description = description;
+        if (enabled !== undefined) updates.enabled = enabled;
+        if (failover_enabled !== undefined) updates.failover_enabled = failover_enabled;
+
+        // Update source in DynamoDB
+        const updateExpression = 'SET ' + Object.keys(updates).map(key => `#${key} = :${key}`).join(', ');
+        const expressionAttributeNames = Object.keys(updates).reduce((acc, key) => {
+            acc[`#${key}`] = key;
+            return acc;
+        }, {});
+        const expressionAttributeValues = Object.keys(updates).reduce((acc, key) => {
+            acc[`:${key}`] = updates[key];
+            return acc;
+        }, {});
+
+        await dynamodb.update({
+            TableName: CONFIG.dynamodb.sourcesTable,
+            Key: { source_id: sourceId },
+            UpdateExpression: updateExpression,
+            ExpressionAttributeNames: expressionAttributeNames,
+            ExpressionAttributeValues: expressionAttributeValues
+        }).promise();
+
+        // Get updated source
+        const updated = await dynamodb.get({
+            TableName: CONFIG.dynamodb.sourcesTable,
+            Key: { source_id: sourceId }
+        }).promise();
+
+        return createResponse(200, {
+            status: 'success',
+            message: 'Source updated successfully',
+            source: updated.Item
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to update source');
+    }
+};
+
+// Delete source
+const deleteSource = async (sourceId) => {
+    try {
+        // Get existing source
+        const existing = await dynamodb.get({
+            TableName: CONFIG.dynamodb.sourcesTable,
+            Key: { source_id: sourceId }
+        }).promise();
+
+        if (!existing.Item) {
+            return createResponse(404, {
+                status: 'error',
+                message: 'Source not found'
+            });
+        }
+
+        // Check if source is currently active
+        if (existing.Item.status === 'active') {
+            return createResponse(400, {
+                status: 'error',
+                message: 'Cannot delete active source. Please stop the source first.'
+            });
+        }
+
+        // Delete source from DynamoDB
+        await dynamodb.delete({
+            TableName: CONFIG.dynamodb.sourcesTable,
+            Key: { source_id: sourceId }
+        }).promise();
+
+        return createResponse(200, {
+            status: 'success',
+            message: 'Source deleted successfully'
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to delete source');
+    }
+};
+
+// Test source connection
+const testSourceConnection = async (sourceId) => {
+    try {
+        // Get source details
+        const result = await dynamodb.get({
+            TableName: CONFIG.dynamodb.sourcesTable,
+            Key: { source_id: sourceId }
+        }).promise();
+
+        if (!result.Item) {
+            return createResponse(404, {
+                status: 'error',
+                message: 'Source not found'
+            });
+        }
+
+        const source = result.Item;
+        const timestamp = new Date().toISOString();
+
+        // Update test timestamp and increment attempts
+        await dynamodb.update({
+            TableName: CONFIG.dynamodb.sourcesTable,
+            Key: { source_id: sourceId },
+            UpdateExpression: 'SET last_tested_at = :timestamp, connection_attempts = connection_attempts + :inc',
+            ExpressionAttributeValues: {
+                ':timestamp': timestamp,
+                ':inc': 1
+            }
+        }).promise();
+
+        // Simulate connection test (in real implementation, this would test the actual connection)
+        const testResult = {
+            success: true,
+            latency: Math.floor(Math.random() * 50) + 10, // Simulated latency 10-60ms
+            bandwidth: Math.floor(Math.random() * 10000) + 5000, // Simulated bandwidth 5-15 Mbps
+            packet_loss: Math.random() * 0.1, // Simulated packet loss 0-0.1%
+            tested_at: timestamp
+        };
+
+        // Update health status based on test results
+        const healthStatus = testResult.success ?
+            (testResult.packet_loss < 0.05 ? 'healthy' : 'degraded') :
+            'unhealthy';
+
+        await dynamodb.update({
+            TableName: CONFIG.dynamodb.sourcesTable,
+            Key: { source_id: sourceId },
+            UpdateExpression: 'SET health_status = :health, last_error = :error',
+            ExpressionAttributeValues: {
+                ':health': healthStatus,
+                ':error': testResult.success ? null : 'Connection test failed'
+            }
+        }).promise();
+
+        return createResponse(200, {
+            status: 'success',
+            message: 'Source connection test completed',
+            source_id: sourceId,
+            test_result: testResult,
+            health_status: healthStatus
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to test source connection');
+    }
 };
 
 // Get all destinations
@@ -474,9 +938,9 @@ const startDestination = async (destinationId) => {
             });
         }
 
-        // For RTMP destinations, integrate with MediaLive
+        // For RTMP destinations, integrate with MediaConnect
         if (destination.platform === 'youtube' || destination.platform === 'custom') {
-            return await startRTMPDestination(destinationId, destination);
+            return await startMediaConnectDestination(destinationId, destination);
         }
 
         return createResponse(400, {
@@ -489,80 +953,51 @@ const startDestination = async (destinationId) => {
     }
 };
 
-// Start RTMP destination with MediaLive integration using Schedule Actions
-const startRTMPDestination = async (destinationId, destination) => {
+// Start RTMP destination with MediaConnect integration
+const startMediaConnectDestination = async (destinationId, destination) => {
     try {
-        console.log(`Starting RTMP destination: ${destination.name} (${destination.platform})`);
-
-        // Get stream key from Parameter Store
-        let streamKey = '';
-        if (destination.stream_key_param) {
-            streamKey = await getStreamKey(destination.stream_key_param);
-        }
+        console.log(`Starting MediaConnect RTMP destination: ${destination.name} (${destination.platform})`);
 
         if (!destination.rtmp_url) {
             throw new Error('RTMP URL is required for RTMP destinations');
         }
 
-        // Get current MediaLive channel configuration
+        // Ensure MediaLive channel is running first
         const channel = await getMediaLiveChannel();
-        console.log(`Current channel state: ${channel.State}`);
+        console.log(`Current MediaLive channel state: ${channel.State}`);
 
-        // Check if we need to start the channel
-        const activeDestinationsCount = await getActiveDestinationsCount();
-        const shouldStartChannel = channel.State === 'IDLE' && activeDestinationsCount === 0;
-
-        // Start channel first if needed
-        if (shouldStartChannel) {
-            console.log('Starting MediaLive channel...');
+        if (channel.State === 'IDLE') {
+            console.log('Starting MediaLive channel for MediaConnect flow...');
             await medialive.startChannel({
                 ChannelId: CONFIG.medialive.channelId
             }).promise();
-            console.log('MediaLive channel start initiated');
 
-            // Wait for channel to be running before adding schedule actions
+            // Wait for channel to be running
             await waitForChannelState('RUNNING', 120);
+            console.log('MediaLive channel is now running');
         }
 
-        // Use MediaLive Schedule Actions to start RTMP output
-        const shortId = destinationId.substring(destinationId.length - 8);
-        const actionName = `start-rtmp-${shortId}`;
+        // Add RTMP output to MediaConnect flow
+        console.log(`Adding MediaConnect output for destination: ${destination.name}`);
+        const outputArn = await addMediaConnectOutput(destination);
 
-        // Create schedule action to start RTMP output
-        const scheduleAction = {
-            ActionName: actionName,
-            ScheduleActionStartSettings: {
-                ImmediateModeScheduleActionStartSettings: {}
-            },
-            ScheduleActionSettings: {
-                RtmpGroupSettings: {
-                    InputLossAction: "EMIT_OUTPUT",
-                    RestartDelay: 15
-                }
-            }
-        };
-
-        console.log(`Creating schedule action to start RTMP output for destination: ${destination.name}`);
-
-        // Actually start the MediaLive channel for real RTMP streaming
-        console.log(`Starting MediaLive channel for RTMP destination: ${destination.name}`);
-
-        // Update destination status to streaming first
+        // Update destination status in database
         const updateParams = {
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId },
-            UpdateExpression: 'SET streaming_status = :status, streaming_started_at = :timestamp, medialive_action_name = :actionName',
+            UpdateExpression: 'SET streaming_status = :status, streaming_started_at = :timestamp, mediaconnect_output_arn = :outputArn, updated_at = :updated',
             ExpressionAttributeValues: {
                 ':status': 'streaming',
                 ':timestamp': new Date().toISOString(),
-                ':actionName': actionName
+                ':outputArn': outputArn,
+                ':updated': new Date().toISOString()
             }
         };
 
         await dynamodb.update(updateParams).promise();
 
-        console.log(`Successfully started streaming to ${destination.platform} destination: ${destination.name}`);
-        console.log(`MediaLive channel will now stream to pre-configured RTMP outputs including Restream.`);
+        console.log(`Successfully started MediaConnect streaming to ${destination.platform} destination: ${destination.name}`);
+        console.log(`MediaConnect output ARN: ${outputArn}`);
 
         return createResponse(200, {
             status: 'success',
@@ -571,22 +1006,23 @@ const startRTMPDestination = async (destinationId, destination) => {
             destination_name: destination.name,
             platform: destination.platform,
             streaming_status: 'streaming',
-            channel_started: shouldStartChannel,
-            note: 'MediaLive integration requires pre-configured RTMP outputs due to runtime update limitations'
+            mediaconnect_output_arn: outputArn,
+            note: 'Using MediaConnect for granular RTMP destination control'
         });
 
     } catch (error) {
-        console.error('Failed to start RTMP destination:', error);
+        console.error('Failed to start MediaConnect destination:', error);
 
         // Try to update status to error in database
         try {
             await dynamodb.update({
                 TableName: CONFIG.dynamodb.destinationsTable,
                 Key: { destination_id: destinationId },
-                UpdateExpression: 'SET streaming_status = :status, updated_at = :timestamp',
+                UpdateExpression: 'SET streaming_status = :status, updated_at = :timestamp, last_error = :error',
                 ExpressionAttributeValues: {
                     ':status': 'error',
-                    ':timestamp': new Date().toISOString()
+                    ':timestamp': new Date().toISOString(),
+                    ':error': error.message
                 }
             }).promise();
         } catch (dbError) {
@@ -651,9 +1087,9 @@ const stopDestination = async (destinationId) => {
             });
         }
 
-        // For RTMP destinations, integrate with MediaLive
+        // For RTMP destinations, integrate with MediaConnect
         if (destination.platform === 'youtube' || destination.platform === 'custom') {
-            return await stopRTMPDestination(destinationId, destination);
+            return await stopMediaConnectDestination(destinationId, destination);
         }
 
         return createResponse(400, {
@@ -666,27 +1102,25 @@ const stopDestination = async (destinationId) => {
     }
 };
 
-// Stop RTMP destination with MediaLive integration
-const stopRTMPDestination = async (destinationId, destination) => {
+// Stop RTMP destination with MediaConnect integration
+const stopMediaConnectDestination = async (destinationId, destination) => {
     try {
-        console.log(`Stopping RTMP destination: ${destination.name} (${destination.platform})`);
+        console.log(`Stopping MediaConnect RTMP destination: ${destination.name} (${destination.platform})`);
 
-        // Get current MediaLive channel configuration
-        const channel = await getMediaLiveChannel();
-        console.log(`Current channel state: ${channel.State}`);
-
-        // Check if we should stop the channel (no more active destinations after this one)
-        const activeDestinationsCount = await getActiveDestinationsCount();
-        const shouldStopChannel = (channel.State === 'RUNNING' || channel.State === 'STARTING') && activeDestinationsCount <= 1; // <= 1 because this destination is still marked as streaming
-
-        // Actually stop MediaLive streaming
-        console.log(`Stopping RTMP streaming for destination: ${destination.name}`);
+        // Check if destination has MediaConnect output ARN
+        if (!destination.mediaconnect_output_arn) {
+            console.warn(`No MediaConnect output ARN found for destination: ${destination.name}`);
+        } else {
+            // Remove RTMP output from MediaConnect flow
+            console.log(`Removing MediaConnect output: ${destination.mediaconnect_output_arn}`);
+            await removeMediaConnectOutput(destination.mediaconnect_output_arn);
+        }
 
         // Update destination status in DynamoDB
         const updateParams = {
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId },
-            UpdateExpression: 'SET streaming_status = :status, updated_at = :timestamp REMOVE streaming_started_at, medialive_action_name',
+            UpdateExpression: 'SET streaming_status = :status, updated_at = :timestamp REMOVE streaming_started_at, mediaconnect_output_arn, last_error',
             ExpressionAttributeValues: {
                 ':status': 'ready',
                 ':timestamp': new Date().toISOString()
@@ -695,17 +1129,7 @@ const stopRTMPDestination = async (destinationId, destination) => {
 
         await dynamodb.update(updateParams).promise();
 
-        // Stop the MediaLive channel if no other destinations are active
-        if (shouldStopChannel) {
-            console.log('Stopping MediaLive channel (no more active destinations)...');
-            await medialive.stopChannel({
-                ChannelId: CONFIG.medialive.channelId
-            }).promise();
-            console.log('MediaLive channel stop initiated');
-        }
-
-        console.log(`Successfully stopped streaming to ${destination.platform} destination: ${destination.name}`);
-        console.log(`MediaLive channel control: Channel ${shouldStopChannel ? 'stopped' : 'continues running for other destinations'}`);
+        console.log(`Successfully stopped MediaConnect streaming to ${destination.platform} destination: ${destination.name}`);
 
         return createResponse(200, {
             status: 'success',
@@ -714,22 +1138,22 @@ const stopRTMPDestination = async (destinationId, destination) => {
             destination_name: destination.name,
             platform: destination.platform,
             streaming_status: 'ready',
-            channel_stopped: shouldStopChannel,
-            note: 'MediaLive integration requires pre-configured RTMP outputs due to runtime update limitations'
+            note: 'MediaConnect output removed - other destinations continue streaming independently'
         });
 
     } catch (error) {
-        console.error('Failed to stop RTMP destination:', error);
+        console.error('Failed to stop MediaConnect destination:', error);
 
         // Try to update status to error in database
         try {
             await dynamodb.update({
                 TableName: CONFIG.dynamodb.destinationsTable,
                 Key: { destination_id: destinationId },
-                UpdateExpression: 'SET streaming_status = :status, updated_at = :timestamp',
+                UpdateExpression: 'SET streaming_status = :status, updated_at = :timestamp, last_error = :error',
                 ExpressionAttributeValues: {
                     ':status': 'error',
-                    ':timestamp': new Date().toISOString()
+                    ':timestamp': new Date().toISOString(),
+                    ':error': error.message
                 }
             }).promise();
         } catch (dbError) {
@@ -740,13 +1164,17 @@ const stopRTMPDestination = async (destinationId, destination) => {
     }
 };
 
-// Synchronize database status with actual MediaLive channel state
+// Synchronize database status with actual MediaConnect and MediaLive state
 const synchronizeDestinationStatus = async () => {
     try {
-        console.log('Synchronizing destination status with MediaLive channel...');
+        console.log('Synchronizing destination status with MediaConnect and MediaLive...');
 
-        // Get current MediaLive channel configuration
+        // Sync MediaConnect status first
+        await syncMediaConnectStatus();
+
+        // Get current MediaLive channel configuration for HLS destinations
         const channel = await getMediaLiveChannel();
+        const isChannelRunning = channel.State === 'RUNNING';
 
         // Get all destinations from database
         const destinationsResult = await dynamodb.scan({
@@ -754,32 +1182,17 @@ const synchronizeDestinationStatus = async () => {
         }).promise();
 
         const destinations = destinationsResult.Items || [];
-        const rtmpDestinations = destinations.filter(d => d.platform === 'custom' || d.platform === 'youtube');
+        const hlsDestinations = destinations.filter(d => d.platform === 'hls');
 
-        // Check if MediaLive channel is running
-        const isChannelRunning = channel.State === 'RUNNING';
+        console.log(`Channel state: ${channel.State}, HLS destinations: ${hlsDestinations.length}`);
 
-        // If channel is running, check which RTMP outputs exist
-        let activeRtmpOutputs = [];
-        if (isChannelRunning && channel.EncoderSettings && channel.EncoderSettings.OutputGroups) {
-            activeRtmpOutputs = channel.EncoderSettings.OutputGroups
-                .filter(group => group.OutputGroupSettings && group.OutputGroupSettings.RtmpGroupSettings)
-                .map(group => group.Name);
-        }
-
-        console.log(`Channel state: ${channel.State}, Active RTMP outputs: ${activeRtmpOutputs.length}`);
-
-        // Update database status for each RTMP destination
-        for (const destination of rtmpDestinations) {
-            const shortId = destination.destination_id.substring(destination.destination_id.length - 8);
-            const expectedOutputName = `rtmp-grp-${shortId}`;
-
-            const shouldBeStreaming = isChannelRunning && activeRtmpOutputs.includes(expectedOutputName);
+        // Update database status for HLS destinations based on MediaLive channel state
+        for (const destination of hlsDestinations) {
             const currentStatus = destination.streaming_status || 'ready';
 
-            if (shouldBeStreaming && currentStatus !== 'streaming') {
+            if (isChannelRunning && currentStatus !== 'streaming') {
                 // Update to streaming
-                console.log(`Updating ${destination.name} status to streaming (MediaLive output active)`);
+                console.log(`Updating ${destination.name} status to streaming (MediaLive channel running)`);
                 await dynamodb.update({
                     TableName: CONFIG.dynamodb.destinationsTable,
                     Key: { destination_id: destination.destination_id },
@@ -790,9 +1203,9 @@ const synchronizeDestinationStatus = async () => {
                         ':updated': new Date().toISOString()
                     }
                 }).promise();
-            } else if (!shouldBeStreaming && currentStatus === 'streaming') {
+            } else if (!isChannelRunning && currentStatus === 'streaming') {
                 // Update to ready
-                console.log(`Updating ${destination.name} status to ready (MediaLive output inactive)`);
+                console.log(`Updating ${destination.name} status to ready (MediaLive channel not running)`);
                 await dynamodb.update({
                     TableName: CONFIG.dynamodb.destinationsTable,
                     Key: { destination_id: destination.destination_id },
@@ -943,6 +1356,31 @@ exports.handler = async (event) => {
             return await getMediaLiveChannelStatus();
         }
 
+        // Source management endpoints
+        if (path === '/api/sources' && httpMethod === 'GET') {
+            return await getSources();
+        }
+
+        if (path === '/api/sources' && httpMethod === 'POST') {
+            return await createSource(body);
+        }
+
+        if (path.startsWith('/api/sources/') && httpMethod === 'PUT') {
+            const sourceId = pathParameters?.id || path.split('/').pop();
+            return await updateSource(sourceId, body);
+        }
+
+        if (path.startsWith('/api/sources/') && httpMethod === 'DELETE') {
+            const sourceId = pathParameters?.id || path.split('/').pop();
+            return await deleteSource(sourceId);
+        }
+
+        if (path.match(/^\/api\/sources\/[^\/]+\/test$/) && httpMethod === 'POST') {
+            const sourceId = path.split('/')[3];
+            return await testSourceConnection(sourceId);
+        }
+
+        // Destination control endpoints
         if (path.match(/^\/api\/destinations\/[^\/]+\/start$/) && httpMethod === 'POST') {
             const destinationId = path.split('/')[3];
             return await startDestination(destinationId);

@@ -33,31 +33,12 @@ Resources:
       Source:
         Name: !Sub '${ProjectName}-medialive-source'
         Description: 'Source from MediaLive channel'
-        Protocol: 'RTP-FEC'
+        Protocol: 'rtp-fec'
         IngestPort: 5000
         WhitelistCidr: '10.0.0.0/8'  # Allow MediaLive internal traffic
         MaxBitrate: 50000000  # 50 Mbps max
-        MaxLatency: 2000      # 2 second max latency
       
-  # IAM Role for MediaConnect
-  MediaConnectRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub '${ProjectName}-${Environment}-mediaconnect-role'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: mediaconnect.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/MediaConnectServiceRolePolicy
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref Environment
+
 
   # Lambda Function for MediaConnect Management
   MediaConnectManagerFunction:
@@ -78,7 +59,7 @@ Resources:
       Code:
         ZipFile: |
           const AWS = require('aws-sdk');
-          const mediaconnect = new AWS.MediaConnect();
+          const mediaconnect = new AWS.MediaConnect({ region: process.env.AWS_REGION });
           
           exports.handler = async (event) => {
               console.log('MediaConnect Manager Event:', JSON.stringify(event, null, 2));

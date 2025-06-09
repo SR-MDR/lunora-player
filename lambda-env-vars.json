@@ -1,0 +1,14 @@
+{
+  "Variables": {
+    "DESTINATIONS_TABLE": "lunora-destinations",
+    "PRESETS_TABLE": "lunora-presets",
+    "SESSIONS_TABLE": "lunora-streaming-sessions",
+    "SOURCES_TABLE": "lunora-sources",
+    "MEDIACONNECT_FLOW_ARN": "arn:aws:mediaconnect:us-west-2:372241484305:flow:1-XVZVBVcDUFwBVlcO-ab0b5da4e768:lunora-player-prod-rtmp-router",
+    "MEDIALIVE_CHANNEL_ID": "3714710",
+    "AWS_ACCOUNT_ID": "372241484305",
+    "PARAMETER_STORE_PREFIX": "/lunora-player/streaming",
+    "MEDIALIVE_REGION": "us-west-2",
+    "NODE_ENV": "prod"
+  }
+}
