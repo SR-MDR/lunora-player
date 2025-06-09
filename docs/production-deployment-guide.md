@@ -279,6 +279,39 @@ aws cloudfront create-invalidation --distribution-id YOUR_ID --paths "/*"
 - **AWS Support**: For infrastructure issues
 - **GitHub Issues**: For application-specific problems
 
+## MediaConnect Granular Control Upgrade (Optional)
+
+### Enhanced Multi-Destination Control
+
+For advanced granular control over RTMP destinations, consider upgrading to the MediaConnect architecture:
+
+**Benefits:**
+- ✅ **Add/edit/remove destinations** without stopping other streams
+- ✅ **Real-time configuration changes** without MediaLive channel restarts
+- ✅ **Fixed cost model**: $391/month for unlimited RTMP destinations
+- ✅ **HLS preservation**: No impact on existing HLS streaming
+
+**Implementation:**
+```bash
+# Deploy MediaConnect infrastructure
+aws cloudformation deploy \
+    --template-file aws/cloudformation/mediaconnect-rtmp-router.yaml \
+    --stack-name lunora-player-prod-mediaconnect \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --region us-west-2 \
+    --profile lunora-media
+
+# Update MediaLive channel to use MediaConnect
+# (Detailed steps in docs/mediaconnect-granular-control-architecture.md)
+```
+
+**Cost Analysis:**
+- **Break-even point**: 4+ RTMP destinations
+- **Monthly cost**: Additional $391 for unlimited destinations
+- **ROI**: Eliminates need for external streaming services
+
+See [MediaConnect Implementation Guide](./mediaconnect-granular-control-architecture.md) for detailed implementation steps.
+
 ## Next Steps
 
 After successful production deployment:
@@ -287,6 +320,7 @@ After successful production deployment:
 2. **Test end-to-end streaming** from Videon nodes to platforms
 3. **Set up monitoring dashboards** for operational visibility
 4. **Train users** on the streaming control interface
-5. **Plan scaling strategy** for multiple channels/regions
+5. **Consider MediaConnect upgrade** for granular destination control
+6. **Plan scaling strategy** for multiple channels/regions
 
 The Lunora Player multi-destination streaming system is now ready for production use with enterprise-grade reliability, security, and scalability!
