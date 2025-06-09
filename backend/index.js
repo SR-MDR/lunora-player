@@ -124,6 +124,9 @@ const waitForChannelState = async (targetState, timeoutSeconds = 60) => {
 // Get all destinations
 const getDestinations = async () => {
     try {
+        // Synchronize database status with actual MediaLive state first
+        await synchronizeDestinationStatus();
+
         const result = await dynamodb.scan({
             TableName: CONFIG.dynamodb.destinationsTable
         }).promise();
@@ -737,10 +740,86 @@ const stopRTMPDestination = async (destinationId, destination) => {
     }
 };
 
+// Synchronize database status with actual MediaLive channel state
+const synchronizeDestinationStatus = async () => {
+    try {
+        console.log('Synchronizing destination status with MediaLive channel...');
+
+        // Get current MediaLive channel configuration
+        const channel = await getMediaLiveChannel();
+
+        // Get all destinations from database
+        const destinationsResult = await dynamodb.scan({
+            TableName: CONFIG.dynamodb.destinationsTable
+        }).promise();
+
+        const destinations = destinationsResult.Items || [];
+        const rtmpDestinations = destinations.filter(d => d.platform === 'custom' || d.platform === 'youtube');
+
+        // Check if MediaLive channel is running
+        const isChannelRunning = channel.State === 'RUNNING';
+
+        // If channel is running, check which RTMP outputs exist
+        let activeRtmpOutputs = [];
+        if (isChannelRunning && channel.EncoderSettings && channel.EncoderSettings.OutputGroups) {
+            activeRtmpOutputs = channel.EncoderSettings.OutputGroups
+                .filter(group => group.OutputGroupSettings && group.OutputGroupSettings.RtmpGroupSettings)
+                .map(group => group.Name);
+        }
+
+        console.log(`Channel state: ${channel.State}, Active RTMP outputs: ${activeRtmpOutputs.length}`);
+
+        // Update database status for each RTMP destination
+        for (const destination of rtmpDestinations) {
+            const shortId = destination.destination_id.substring(destination.destination_id.length - 8);
+            const expectedOutputName = `rtmp-grp-${shortId}`;
+
+            const shouldBeStreaming = isChannelRunning && activeRtmpOutputs.includes(expectedOutputName);
+            const currentStatus = destination.streaming_status || 'ready';
+
+            if (shouldBeStreaming && currentStatus !== 'streaming') {
+                // Update to streaming
+                console.log(`Updating ${destination.name} status to streaming (MediaLive output active)`);
+                await dynamodb.update({
+                    TableName: CONFIG.dynamodb.destinationsTable,
+                    Key: { destination_id: destination.destination_id },
+                    UpdateExpression: 'SET streaming_status = :status, streaming_started_at = :timestamp, updated_at = :updated',
+                    ExpressionAttributeValues: {
+                        ':status': 'streaming',
+                        ':timestamp': new Date().toISOString(),
+                        ':updated': new Date().toISOString()
+                    }
+                }).promise();
+            } else if (!shouldBeStreaming && currentStatus === 'streaming') {
+                // Update to ready
+                console.log(`Updating ${destination.name} status to ready (MediaLive output inactive)`);
+                await dynamodb.update({
+                    TableName: CONFIG.dynamodb.destinationsTable,
+                    Key: { destination_id: destination.destination_id },
+                    UpdateExpression: 'SET streaming_status = :status, updated_at = :updated REMOVE streaming_started_at',
+                    ExpressionAttributeValues: {
+                        ':status': 'ready',
+                        ':updated': new Date().toISOString()
+                    }
+                }).promise();
+            }
+        }
+
+        console.log('Destination status synchronization completed');
+        return true;
+    } catch (error) {
+        console.error('Failed to synchronize destination status:', error);
+        return false;
+    }
+};
+
 // Get MediaLive channel status
 const getMediaLiveChannelStatus = async () => {
     try {
         console.log('Getting MediaLive channel status...');
+
+        // Synchronize database status with actual MediaLive state first
+        await synchronizeDestinationStatus();
 
         // Get current MediaLive channel configuration and state
         const channel = await getMediaLiveChannel();

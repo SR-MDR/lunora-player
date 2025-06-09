@@ -4,7 +4,7 @@ class MediaServicesDashboard {
         this.awsConfig = window.AWSConfig || {};
         this.refreshInterval = null;
         this.costChart = null;
-        this.apiBaseUrl = 'https://smwahluvvvo2lkg3bvxgkzpgqm0ovmqh.lambda-url.us-west-2.on.aws/api';
+        this.apiBaseUrl = 'https://hi2pfpdbrlcry5w73wt27xrniu0vhykl.lambda-url.us-west-2.on.aws/api';
 
         this.init();
     }
@@ -103,12 +103,30 @@ class MediaServicesDashboard {
 
             if (response.ok) {
                 const destinations = data.destinations || [];
-                const activeCount = destinations.filter(d => d.status === 'streaming').length;
+                const activeCount = destinations.filter(d => d.streaming_status === 'streaming').length;
 
                 // Update streaming status in the dashboard
                 const streamingElement = document.getElementById('streaming-destinations-count');
                 if (streamingElement) {
                     streamingElement.textContent = `${destinations.length} configured, ${activeCount} active`;
+                }
+
+                // Update quick stats in the streaming control link section
+                const quickDestinationsElement = document.getElementById('quick-destinations-count');
+                const quickStatusElement = document.getElementById('quick-streaming-status');
+
+                if (quickDestinationsElement) {
+                    quickDestinationsElement.textContent = destinations.length;
+                }
+
+                if (quickStatusElement) {
+                    if (activeCount > 0) {
+                        quickStatusElement.textContent = `${activeCount} Active`;
+                        quickStatusElement.style.color = '#28a745'; // Green for active
+                    } else {
+                        quickStatusElement.textContent = 'Idle';
+                        quickStatusElement.style.color = '#6c757d'; // Gray for idle
+                    }
                 }
 
                 console.log(`Streaming status: ${destinations.length} destinations, ${activeCount} active`);
