@@ -1,4 +1,4 @@
-# MediaLive Integration Implementation Prompt - Updated June 2025
+# MediaConnect Granular Control Implementation - Updated June 2025
 
 ## Context Summary
 I have a working multi-destination streaming system with:
@@ -8,9 +8,9 @@ I have a working multi-destination streaming system with:
 - ✅ Status persistence across page refreshes
 - ✅ Production deployment with S3/CloudFront hosting
 - ✅ **TESTED**: End-to-end workflow OBS → MediaLive → Restream RTMP (working but poor quality - frame loss)
-- ⚠️ **Missing**: Dashboard backend API connection
+- ✅ **FIXED**: Dashboard backend API connection and status synchronization
 - ✅ **TESTED**: End-to-end workflow OBS → MediaLive → HLS Stream (working but poor quality - frame loss)
-- ⚠️ **Missing**: Backup URL/stream key support for destinations
+- 🚧 **IN PROGRESS**: MediaConnect implementation for granular RTMP control
 
 ## Current Architecture
 - **Frontend**: Vanilla JavaScript web interface at CloudFront distribution
@@ -127,18 +127,19 @@ NEEDED ADDITIONS:
 
 ## Implementation Requirements
 
-### Phase 1: Basic MediaLive Integration
-1. **Choose Primary Channel**: Select which MediaLive channel to use for multi-destination streaming
-2. **Update startDestination()**:
-   - Add MediaLive API calls to create RTMP outputs
-   - Handle channel state management (start if idle)
-   - Add error handling for MediaLive operations
-3. **Update stopDestination()**:
-   - Remove RTMP outputs from MediaLive channel
-   - Stop channel if no destinations remain active
-   - Handle cleanup and error scenarios
-4. **Add MediaLive Permissions**: Ensure Lambda has proper IAM permissions
-5. **Environment Variables**: Add MediaLive channel ID to Lambda config
+### Phase 1: MediaConnect Infrastructure Deployment
+1. **Deploy MediaConnect Flow**: Create RTMP router flow using CloudFormation
+2. **Update MediaLive Channel**: Replace direct RTMP outputs with MediaConnect output
+3. **Preserve HLS Path**: Ensure MediaPackage output remains unchanged
+4. **Test Infrastructure**: Verify MediaConnect flow receives stream from MediaLive
+5. **IAM Permissions**: Add MediaConnect permissions to Lambda functions
+
+### Phase 2: MediaConnect Lambda Integration
+1. **MediaConnect Manager Function**: Deploy dedicated Lambda for flow management
+2. **Update Main API**: Integrate MediaConnect operations with existing destination API
+3. **Database Schema Updates**: Add MediaConnect output ARN tracking
+4. **Error Handling**: Robust error handling for MediaConnect operations
+5. **Status Synchronization**: Real-time sync between MediaConnect and database
 
 ### Phase 2: End-to-End Workflow Testing
 1. **OBS RTMP Input**: Test streaming from OBS to MediaLive channel
@@ -165,36 +166,52 @@ NEEDED ADDITIONS:
 
 ### Technical Implementation Details
 ```javascript
-// Required MediaLive operations:
+// Required MediaConnect operations:
+- mediaconnect.describeFlow() - Get current flow config
+- mediaconnect.addFlowOutputs() - Add RTMP destinations
+- mediaconnect.removeFlowOutput() - Remove RTMP destinations
+- mediaconnect.updateFlowOutput() - Update destination settings
+
+// Required MediaLive operations (simplified):
 - medialive.describeChannel() - Get current channel config
-- medialive.updateChannel() - Add/remove outputs
+- medialive.updateChannel() - Add MediaConnect output (one-time)
 - medialive.startChannel() - Start channel if idle
-- medialive.stopChannel() - Stop channel when no outputs
+- medialive.stopChannel() - Stop channel when no destinations
 
 // New Lambda environment variables needed:
-- MEDIALIVE_CHANNEL_ID: Primary channel for streaming
-- MEDIALIVE_REGION: us-west-2
+- MEDIACONNECT_FLOW_ARN: MediaConnect flow for RTMP routing
+- MEDIACONNECT_MANAGER_FUNCTION: MediaConnect manager Lambda ARN
+- MEDIALIVE_CHANNEL_ID: Primary channel for streaming (unchanged)
+- MEDIALIVE_REGION: us-west-2 (unchanged)
 ```
 
-### Expected Behavior After Implementation
-1. **Start Destination**:
+### Expected Behavior After MediaConnect Implementation
+1. **Start Destination (Granular Control)**:
    - User clicks "Start" on YouTube destination
-   - Lambda adds RTMP output to MediaLive channel
-   - MediaLive begins pushing stream to YouTube
-   - Database status updates to "streaming"
-   - Frontend shows "streaming" status
+   - Lambda calls MediaConnect to add RTMP output to flow
+   - MediaConnect begins pushing stream to YouTube (no MediaLive restart)
+   - Database status updates to "streaming" with MediaConnect output ARN
+   - Frontend shows "streaming" status immediately
 
-2. **Stop Destination**:
+2. **Stop Destination (Independent Control)**:
    - User clicks "Stop" on YouTube destination
-   - Lambda removes RTMP output from MediaLive channel
-   - MediaLive stops pushing to YouTube
+   - Lambda calls MediaConnect to remove RTMP output from flow
+   - MediaConnect stops pushing to YouTube (other destinations unaffected)
    - Database status updates to "ready"
    - Frontend shows "ready" status
 
-3. **Multiple Destinations**:
-   - Can start/stop individual destinations independently
-   - MediaLive channel runs while any destination is active
-   - Channel stops automatically when all destinations stopped
+3. **Add/Edit Destinations (Real-time)**:
+   - User adds new destination or edits existing RTMP URL/stream key
+   - Lambda calls MediaConnect to add/update output in real-time
+   - No interruption to other active destinations
+   - No MediaLive channel restart required
+   - Immediate configuration changes take effect
+
+4. **HLS Streaming (Unchanged)**:
+   - HLS viewers experience no changes or interruptions
+   - MediaLive → MediaPackage path preserved
+   - Same HLS endpoints and player functionality
+   - No impact on existing HLS infrastructure
 
 ### Cost Optimization
 - Channel should auto-start when first destination starts
@@ -321,8 +338,36 @@ NEEDED ADDITIONS:
 ## AWS Profile
 Use AWS profile: `lunora-media` for all AWS CLI operations.
 
+## MediaConnect Implementation Status
+
+### ✅ **Completed (June 9, 2025)**
+- **Dashboard API Connection**: Fixed and deployed
+- **Status Synchronization**: Database now syncs with actual MediaLive state
+- **Production Deployment**: All frontend/backend components working
+- **Documentation**: Updated architecture and implementation guides
+
+### 🚧 **In Progress (Current Branch: feature/mediaconnect-granular-control)**
+- **MediaConnect CloudFormation**: Template created for infrastructure deployment
+- **Lambda Integration**: Planning MediaConnect API integration
+- **Database Schema**: Designing MediaConnect output ARN tracking
+- **Cost Analysis**: Completed - $391/month for unlimited RTMP destinations
+
+### ⏳ **Next Steps**
+1. **Deploy MediaConnect Infrastructure**: CloudFormation stack deployment
+2. **Update MediaLive Channel**: Add MediaConnect output group
+3. **Lambda Function Updates**: Integrate MediaConnect operations
+4. **Testing**: End-to-end workflow validation
+5. **Migration**: Gradual transition from direct RTMP to MediaConnect
+
+### 🎯 **Success Criteria**
+- ✅ **HLS Streaming**: No impact on existing HLS infrastructure
+- ⏳ **Granular Control**: Add/edit/remove RTMP destinations independently
+- ⏳ **Real-time Updates**: No MediaLive channel restarts required
+- ⏳ **Cost Efficiency**: Predictable $391/month for unlimited destinations
+- ⏳ **Quality Preservation**: No degradation in streaming quality
+
 ## Current Status
 - All AWS services stopped to minimize costs
 - Frontend deployed to production with MediaLive status indicator
 - Backend Lambda API deployed and functional
-- Ready for MediaLive integration and testing
+- Ready for MediaConnect infrastructure deployment and testing

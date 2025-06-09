@@ -11,15 +11,22 @@ This document outlines the architecture for expanding the Lunora Player into a c
 Videon Edge → MediaLive → MediaPackage → Lunora Player
 ```
 
-### **Enhanced Multi-Destination State:**
+### **Enhanced Multi-Destination State (MediaConnect Approach):**
 ```
 Videon Edge A ──┐
-                ├─→ MediaLive (Enhanced) ──┬─→ YouTube Live
-Videon Edge B ──┘                          ├─→ X (Twitter) Live
-                                           ├─→ LinkedIn Live
-                                           ├─→ Custom RTMP Destinations
-                                           └─→ MediaPackage → Lunora Player
+                ├─→ MediaLive ──┬─→ MediaPackage → Lunora Player [UNCHANGED]
+Videon Edge B ──┘               └─→ MediaConnect ──┬─→ YouTube Live
+                                                   ├─→ X (Twitter) Live
+                                                   ├─→ LinkedIn Live
+                                                   └─→ Custom RTMP Destinations
 ```
+
+### **Key Benefits of MediaConnect Approach:**
+- ✅ **HLS Path Unchanged**: Zero impact on existing HLS streaming
+- ✅ **Granular Control**: Add/edit/remove RTMP destinations independently
+- ✅ **No Channel Restarts**: Real-time destination management
+- ✅ **Cost Predictable**: ~$391/month additional for unlimited RTMP destinations
+- ✅ **Scalable**: Linear scaling without MediaLive output limitations
 
 ## 🏗️ **AWS Services Architecture**
 
@@ -33,18 +40,30 @@ Videon Edge B ──┘                          ├─→ X (Twitter) Live
 - **Input Failover**: Automatic switching between primary/secondary
 - **Manual Override**: GUI control for source selection
 
-**Output Groups:**
-- **YouTube Output Group**: Optimized RTMP push to YouTube Live
-- **X Output Group**: Optimized RTMP push to X Live
-- **LinkedIn Output Group**: Optimized RTMP push to LinkedIn Live
-- **Custom RTMP Group**: Configurable RTMP destinations
+**Output Groups (MediaConnect Approach):**
 - **MediaPackage Group**: Existing HLS packaging (unchanged)
+- **MediaConnect Group**: Single output to MediaConnect flow for RTMP routing
 
 **Channel Features:**
-- **Dynamic Output Control**: Start/stop individual outputs via API
-- **Encoding Profiles**: Platform-specific optimization
-- **Failover Logic**: Automatic input switching with manual override
+- **Simplified Configuration**: Only two output groups (MediaPackage + MediaConnect)
+- **HLS Preservation**: Direct MediaLive → MediaPackage path maintained
+- **RTMP Flexibility**: All RTMP destinations managed through MediaConnect
 - **Recording**: Optional S3 recording while streaming
+
+#### **2. AWS MediaConnect RTMP Router**
+
+**MediaConnect Flow Configuration:**
+- **Single Flow**: Receives stream from MediaLive
+- **Dynamic Outputs**: RTMP destinations managed via API
+- **Granular Control**: Add/remove/edit destinations without channel restart
+- **Cost Efficient**: ~$391/month for unlimited RTMP destinations
+
+**RTMP Output Management:**
+- **YouTube Live**: Dynamically added/removed via MediaConnect API
+- **X (Twitter) Live**: Independent start/stop control
+- **LinkedIn Live**: Real-time configuration updates
+- **Custom RTMP**: Unlimited custom destinations
+- **Platform Optimization**: Preset-based encoding for each platform
 
 #### **2. Source Redundancy System**
 
@@ -924,7 +943,79 @@ Analytics:
 - **Preset Optimization**: Balance quality vs. bandwidth costs
 - **Recording Management**: Lifecycle policies for S3 storage
 
-## 🔐 **Authentication & Authorization Architecture**
+## 💰 **MediaConnect Granular Control Cost Analysis**
+
+### **MediaConnect vs Direct MediaLive Outputs**
+
+#### **Current Direct MediaLive Limitations:**
+- **Channel Restart Required**: Must stop all streams to add/edit destinations
+- **Linear Cost Scaling**: Each RTMP output adds $0.50-2.00/hour
+- **Configuration Complexity**: Pre-configured outputs only
+- **Limited Flexibility**: Cannot modify destinations during streaming
+
+#### **MediaConnect Approach Benefits:**
+- **Granular Control**: Add/edit/remove destinations without stopping streams
+- **Fixed Cost Model**: $391/month regardless of destination count
+- **Real-time Updates**: Instant destination configuration changes
+- **HLS Preservation**: No impact on existing HLS streaming infrastructure
+
+### **Monthly Cost Comparison (24/7 Streaming):**
+
+| Destinations | Direct MediaLive | MediaConnect | Savings |
+|--------------|------------------|--------------|---------|
+| **1-3 RTMP** | $1,440-1,800 | $1,471 | Break-even |
+| **4-6 RTMP** | $1,800-2,160 | $1,471 | $329-689 |
+| **7-10 RTMP** | $2,160-2,880 | $1,471 | $689-1,409 |
+| **Unlimited** | $2,880+ | $1,471 | $1,409+ |
+
+### **MediaConnect Implementation Costs:**
+- **MediaConnect Flow**: $115/month (24/7 operation)
+- **Data Transfer**: $276/month (10 Mbps stream to internet)
+- **Total Additional**: $391/month for unlimited RTMP destinations
+
+### **ROI Analysis:**
+- **Break-even Point**: 4 RTMP destinations
+- **Cost Predictability**: Fixed monthly cost regardless of destination count
+- **Operational Value**: Eliminates need for external streaming services
+- **Scalability**: Linear scaling without MediaLive output limitations
+
+## � **MediaConnect Granular Control Cost Analysis**
+
+### **MediaConnect vs Direct MediaLive Outputs**
+
+#### **Current Direct MediaLive Limitations:**
+- **Channel Restart Required**: Must stop all streams to add/edit destinations
+- **Linear Cost Scaling**: Each RTMP output adds $0.50-2.00/hour
+- **Configuration Complexity**: Pre-configured outputs only
+- **Limited Flexibility**: Cannot modify destinations during streaming
+
+#### **MediaConnect Approach Benefits:**
+- **Granular Control**: Add/edit/remove destinations without stopping streams
+- **Fixed Cost Model**: $391/month regardless of destination count
+- **Real-time Updates**: Instant destination configuration changes
+- **HLS Preservation**: No impact on existing HLS streaming infrastructure
+
+### **Monthly Cost Comparison (24/7 Streaming):**
+
+| Destinations | Direct MediaLive | MediaConnect | Savings |
+|--------------|------------------|--------------|---------|
+| **1-3 RTMP** | $1,440-1,800 | $1,471 | Break-even |
+| **4-6 RTMP** | $1,800-2,160 | $1,471 | $329-689 |
+| **7-10 RTMP** | $2,160-2,880 | $1,471 | $689-1,409 |
+| **Unlimited** | $2,880+ | $1,471 | $1,409+ |
+
+### **MediaConnect Implementation Costs:**
+- **MediaConnect Flow**: $115/month (24/7 operation)
+- **Data Transfer**: $276/month (10 Mbps stream to internet)
+- **Total Additional**: $391/month for unlimited RTMP destinations
+
+### **ROI Analysis:**
+- **Break-even Point**: 4 RTMP destinations
+- **Cost Predictability**: Fixed monthly cost regardless of destination count
+- **Operational Value**: Eliminates need for external streaming services
+- **Scalability**: Linear scaling without MediaLive output limitations
+
+## �🔐 **Authentication & Authorization Architecture**
 
 ### **AWS Cognito Integration**
 
