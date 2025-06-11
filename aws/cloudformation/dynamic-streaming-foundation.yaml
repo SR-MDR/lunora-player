@@ -1,0 +1,303 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lunora Player - Dynamic Streaming Foundation Infrastructure'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'lunora-player'
+    Description: 'Name of the project for resource naming'
+  
+  Environment:
+    Type: String
+    Default: 'prod'
+    AllowedValues: ['prod', 'staging', 'dev']
+    Description: 'Environment name'
+  
+  MediaConnectFlowArn:
+    Type: String
+    Description: 'ARN of the existing MediaConnect flow'
+    Default: 'arn:aws:mediaconnect:us-west-2:372241484305:flow:1-DgdVCAEFAAsHBgVS-e049c6465752:lunora-player-prod-srt-router'
+
+Resources:
+  # Enhanced DynamoDB Table for Dynamic Destinations
+  DynamicDestinationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-dynamic-destinations-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: destination_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: destination_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: dynamic-streaming-destinations
+
+  # IAM Role for Lambda Function
+  DynamicStreamingLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-dynamic-streaming-lambda-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamicStreamingPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # DynamoDB permissions
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt DynamicDestinationsTable.Arn
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lunora-presets'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lunora-streaming-sessions'
+              
+              # MediaConnect permissions
+              - Effect: Allow
+                Action:
+                  - mediaconnect:DescribeFlow
+                  - mediaconnect:AddFlowOutputs
+                  - mediaconnect:RemoveFlowOutput
+                  - mediaconnect:UpdateFlowOutput
+                  - mediaconnect:ListFlows
+                Resource: '*'
+              
+              # MediaLive permissions
+              - Effect: Allow
+                Action:
+                  - medialive:CreateChannel
+                  - medialive:DeleteChannel
+                  - medialive:DescribeChannel
+                  - medialive:StartChannel
+                  - medialive:StopChannel
+                  - medialive:UpdateChannel
+                  - medialive:ListChannels
+                  - medialive:CreateInput
+                  - medialive:DeleteInput
+                  - medialive:DescribeInput
+                  - medialive:ListInputs
+                Resource: '*'
+              
+              # Parameter Store permissions
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource:
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${ProjectName}/streaming/*'
+              
+              # CloudWatch Logs permissions
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+
+  # IAM Role for MediaLive Channels
+  MediaLiveAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-medialive-access-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: medialive.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: MediaLiveAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - mediaconnect:ManagedDescribeFlow
+                  - mediaconnect:ManagedAddOutput
+                  - mediaconnect:ManagedRemoveOutput
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                  - logs:DescribeLogGroups
+                Resource: '*'
+
+  # Lambda Function for Dynamic Streaming API
+  DynamicStreamingLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-dynamic-streaming-api'
+      Runtime: nodejs22.x
+      Handler: enhanced-lambda-handler.handler
+      Role: !GetAtt DynamicStreamingLambdaRole.Arn
+      Timeout: 300
+      MemorySize: 1024
+      Environment:
+        Variables:
+          NODE_ENV: !Ref Environment
+          AWS_ACCOUNT_ID: !Ref AWS::AccountId
+          REGION: !Ref AWS::Region
+          DESTINATIONS_TABLE: !Ref DynamicDestinationsTable
+          PRESETS_TABLE: 'lunora-presets'
+          SESSIONS_TABLE: 'lunora-streaming-sessions'
+          PARAMETER_STORE_PREFIX: !Sub '/${ProjectName}/streaming'
+          MEDIACONNECT_FLOW_ARN: !Ref MediaConnectFlowArn
+      Code:
+        ZipFile: |
+          // Placeholder - will be replaced during deployment
+          exports.handler = async (event) => {
+            return {
+              statusCode: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type'
+              },
+              body: JSON.stringify({
+                message: 'Dynamic streaming API placeholder',
+                timestamp: new Date().toISOString()
+              })
+            };
+          };
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: dynamic-streaming-api
+
+  # Lambda Function URL
+  DynamicStreamingLambdaFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref DynamicStreamingLambdaFunction
+      AuthType: NONE
+      Cors:
+        AllowCredentials: false
+        AllowHeaders:
+          - Content-Type
+          - X-Amz-Date
+          - Authorization
+          - X-Api-Key
+          - X-Amz-Security-Token
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowOrigins:
+          - '*'
+        ExposeHeaders:
+          - Date
+          - X-Amzn-RequestId
+        MaxAge: 86400
+
+  # Lambda Permission for Function URL
+  DynamicStreamingLambdaFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DynamicStreamingLambdaFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: '*'
+      FunctionUrlAuthType: NONE
+
+  # CloudWatch Log Group for Lambda Function
+  DynamicStreamingLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ProjectName}-${Environment}-dynamic-streaming-api'
+      RetentionInDays: 14
+
+  # CloudWatch Alarms for Monitoring
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-dynamic-streaming-lambda-errors'
+      AlarmDescription: 'Monitor Lambda function errors'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref DynamicStreamingLambdaFunction
+
+  LambdaDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-dynamic-streaming-lambda-duration'
+      AlarmDescription: 'Monitor Lambda function duration'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 30000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref DynamicStreamingLambdaFunction
+
+Outputs:
+  DynamicStreamingApiUrl:
+    Description: 'URL for the Dynamic Streaming API'
+    Value: !GetAtt DynamicStreamingLambdaFunctionUrl.FunctionUrl
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-dynamic-streaming-api-url'
+
+  DynamicDestinationsTableName:
+    Description: 'Name of the Dynamic Destinations DynamoDB table'
+    Value: !Ref DynamicDestinationsTable
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-dynamic-destinations-table'
+
+  LambdaFunctionArn:
+    Description: 'ARN of the Dynamic Streaming Lambda function'
+    Value: !GetAtt DynamicStreamingLambdaFunction.Arn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-dynamic-streaming-lambda-arn'
+
+  MediaLiveAccessRoleArn:
+    Description: 'ARN of the MediaLive access role'
+    Value: !GetAtt MediaLiveAccessRole.Arn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-medialive-access-role-arn'
