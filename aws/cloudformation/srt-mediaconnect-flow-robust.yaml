@@ -42,6 +42,7 @@ Resources:
         # Note: Encryption will be configured separately if needed
 
   # MediaConnect Outputs - One for each MediaLive channel
+  # RTP-FEC uses port, port+2, and port+4, so we need spacing of at least 5 ports
   PrimaryChannelOutput:
     Type: AWS::MediaConnect::FlowOutput
     Properties:
@@ -59,7 +60,7 @@ Resources:
       Name: 'youtube-channel-output'
       Description: 'Output to YouTube MediaLive Channel'
       Protocol: 'rtp-fec'
-      Port: 5001
+      Port: 5010
       Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
 
   TwitchChannelOutput:
@@ -69,7 +70,7 @@ Resources:
       Name: 'twitch-channel-output'
       Description: 'Output to Twitch MediaLive Channel'
       Protocol: 'rtp-fec'
-      Port: 5002
+      Port: 5020
       Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
 
   LinkedInChannelOutput:
@@ -79,7 +80,7 @@ Resources:
       Name: 'linkedin-channel-output'
       Description: 'Output to LinkedIn MediaLive Channel'
       Protocol: 'rtp-fec'
-      Port: 5003
+      Port: 5030
       Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
 
   CustomChannelOutput:
@@ -89,7 +90,7 @@ Resources:
       Name: 'custom-channel-output'
       Description: 'Output to Custom MediaLive Channel'
       Protocol: 'rtp-fec'
-      Port: 5004
+      Port: 5040
       Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
 
   # CloudWatch Alarms for Monitoring
