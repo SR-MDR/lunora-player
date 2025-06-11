@@ -50,7 +50,6 @@ Resources:
       Description: 'Output to Primary MediaLive Channel (HLS)'
       Protocol: 'rtp-fec'
       Port: 5000
-      MaxLatency: 2000
       Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
 
   YouTubeChannelOutput:
@@ -61,7 +60,6 @@ Resources:
       Description: 'Output to YouTube MediaLive Channel'
       Protocol: 'rtp-fec'
       Port: 5001
-      MaxLatency: 2000
       Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
 
   TwitchChannelOutput:
@@ -72,7 +70,6 @@ Resources:
       Description: 'Output to Twitch MediaLive Channel'
       Protocol: 'rtp-fec'
       Port: 5002
-      MaxLatency: 2000
       Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
 
   LinkedInChannelOutput:
@@ -83,7 +80,6 @@ Resources:
       Description: 'Output to LinkedIn MediaLive Channel'
       Protocol: 'rtp-fec'
       Port: 5003
-      MaxLatency: 2000
       Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
 
   CustomChannelOutput:
@@ -94,7 +90,6 @@ Resources:
       Description: 'Output to Custom MediaLive Channel'
       Protocol: 'rtp-fec'
       Port: 5004
-      MaxLatency: 2000
       Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
 
   # CloudWatch Alarms for Monitoring
