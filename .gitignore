@@ -100,6 +100,13 @@ aws/outputs/
 # Backup files
 *.backup
 *.bak
+backups/
+.last-backup-path
+
+# AWS sensitive data
+*lambda-function.json
+*deployment-config.json
+*table-backup.json
 
 # Editor backups
 *~
