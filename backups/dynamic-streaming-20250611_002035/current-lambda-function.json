@@ -1,0 +1,58 @@
+{
+    "Configuration": {
+        "FunctionName": "lunora-player-prod-multi-destination-api",
+        "FunctionArn": "arn:aws:lambda:us-west-2:372241484305:function:lunora-player-prod-multi-destination-api",
+        "Runtime": "nodejs22.x",
+        "Role": "arn:aws:iam::372241484305:role/lunora-player-prod-lambda-role",
+        "Handler": "index.handler",
+        "CodeSize": 14415911,
+        "Description": "",
+        "Timeout": 30,
+        "MemorySize": 512,
+        "LastModified": "2025-06-10T04:06:36.000+0000",
+        "CodeSha256": "70ruW5GSR6k/K0+fBxZutcVgoMmPWMzqQ2FrHcDjNFM=",
+        "Version": "$LATEST",
+        "Environment": {
+            "Variables": {
+                "PRESETS_TABLE": "lunora-presets",
+                "MEDIALIVE_REGION": "us-west-2",
+                "MEDIALIVE_CHANNEL_ID": "3714710",
+                "AWS_ACCOUNT_ID": "372241484305",
+                "DESTINATIONS_TABLE": "lunora-destinations",
+                "PARAMETER_STORE_PREFIX": "/lunora-player/streaming",
+                "NODE_ENV": "prod",
+                "SOURCES_TABLE": "lunora-sources",
+                "MEDIACONNECT_FLOW_ARN": "arn:aws:mediaconnect:us-west-2:372241484305:flow:1-XVZVBVcDUFwBVlcO-ab0b5da4e768:lunora-player-prod-rtmp-router",
+                "SESSIONS_TABLE": "lunora-streaming-sessions"
+            }
+        },
+        "TracingConfig": {
+            "Mode": "PassThrough"
+        },
+        "RevisionId": "3a91b53d-b307-4446-aa5e-ab0f2604d530",
+        "State": "Active",
+        "LastUpdateStatus": "Successful",
+        "PackageType": "Zip",
+        "Architectures": [
+            "x86_64"
+        ],
+        "EphemeralStorage": {
+            "Size": 512
+        },
+        "SnapStart": {
+            "ApplyOn": "None",
+            "OptimizationStatus": "Off"
+        },
+        "RuntimeVersionConfig": {
+            "RuntimeVersionArn": "arn:aws:lambda:us-west-2::runtime:fd2e05b324f99edd3c6e17800b2535deb79bcce74b7506d595a94870b3d9bd2e"
+        },
+        "LoggingConfig": {
+            "LogFormat": "Text",
+            "LogGroup": "/aws/lambda/lunora-player-prod-multi-destination-api"
+        }
+    },
+    "Code": {
+        "RepositoryType": "S3",
+        "Location": "https://awslambda-us-west-2-tasks.s3.us-west-2.amazonaws.com/snapshots/372241484305/lunora-player-prod-multi-destination-api-7622e18c-0e0b-438d-9c45-0eda86d6d73a?versionId=JEqjjIJTRZZGkKEgIiKNCiH4kZJsgxBC&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEPP%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLXdlc3QtMiJGMEQCICQo3Q2CHDt8x3a0jbFnydb6EpHvg4pAEJwJXzDbUJpCAiAHlr%2FgbEY10e7FeBGRYRbg6wKAk1DHGH3WRijoBeOq7iqSAgjM%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAUaDDUwMjI5NzA3NjE2MyIMG5Ioyam2nJupKauwKuYB6hycIIOh8EHnnaZ41onqDF0Eoe%2FAneMDEdaRHdXjqMXO474gh1%2BI4FH%2FnOoKY6IuCv3zLYFBMZ8zzpqmMxfk8wPIPH3lQtSsK%2Fjn%2BIwkRbcW6k%2FW3viFyjaKXOQPr4tfTSlM6nginpo41PFHjGdnrx9LElB4PuDVlkkaMc91aobU1RNKEnqetduCK6a%2BDDUH5vcxRCYWBdYz9%2BAPAow45kbk8a%2FC6PjyBWSdjihEAfkjRJkX4SmvH0cT5IBxyHoWBMRRHvxv1szp8FyJMwEkFdR9HdnLcWqJpbj8VQbY%2ByUJYcjayEQwydqjwgY6kAFxzr%2BmNJ91k4%2BzSkNIIhhHXoDXKqzSpIQd9B6ZngbMMRsM4OLyT%2F0V2WwCe%2FVNLzFxq1vGGlt0RzVWIS16rJEloLXvFElSzYz4tCP0ZLt5pZmxlFWdHKi%2F%2BDWu%2FeEvmaXzZuzBU8bxMSzBzFqrTuLt9s%2FXwozylNhg4DFIijnp3xiwdPeHHHqLkwgPYHtCYT8%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20250611T042036Z&X-Amz-SignedHeaders=host&X-Amz-Expires=600&X-Amz-Credential=ASIAXJ4Z5EHBWIDNHS7Q%2F20250611%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Signature=9499605bd367694059d8a4dc4b3bd9f1c2c50d5063f87df748888a0540c8a95d"
+    }
+}

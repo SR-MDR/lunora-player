@@ -22,136 +22,260 @@ class DynamicDestinationManager {
                 name: 'YouTube Streaming Channel',
                 description: 'Dynamic MediaLive channel for YouTube streaming',
                 encoderSettings: {
-                    videoDescriptions: [{
-                        name: 'video_1080p30',
-                        codecSettings: {
-                            h264Settings: {
-                                profile: 'HIGH',
-                                level: 'H264_LEVEL_4_1',
-                                rateControlMode: 'CBR',
-                                bitrate: 6000000,
-                                framerateControl: 'SPECIFIED',
-                                framerateNumerator: 30,
-                                framerateDenominator: 1,
-                                gopSize: 60,
-                                gopSizeUnits: 'FRAMES'
+                    VideoDescriptions: [{
+                        Name: 'video_1080p30',
+                        CodecSettings: {
+                            H264Settings: {
+                                Profile: 'HIGH',
+                                Level: 'H264_LEVEL_4_1',
+                                RateControlMode: 'CBR',
+                                Bitrate: 6000000,
+                                FramerateControl: 'SPECIFIED',
+                                FramerateNumerator: 30,
+                                FramerateDenominator: 1,
+                                GopSize: 60,
+                                GopSizeUnits: 'FRAMES'
                             }
                         },
-                        width: 1920,
-                        height: 1080
+                        Width: 1920,
+                        Height: 1080
                     }],
-                    audioDescriptions: [{
-                        name: 'audio_aac',
-                        codecSettings: {
-                            aacSettings: {
-                                bitrate: 128000,
-                                codingMode: 'CODING_MODE_2_0',
-                                sampleRate: 48000
+                    AudioDescriptions: [{
+                        Name: 'audio_aac',
+                        AudioSelectorName: 'default-audio-selector',
+                        CodecSettings: {
+                            AacSettings: {
+                                Bitrate: 128000,
+                                CodingMode: 'CODING_MODE_2_0',
+                                SampleRate: 48000
                             }
                         }
-                    }]
+                    }],
+                    OutputGroups: [{
+                        Name: 'RTMP_Output_Group',
+                        OutputGroupSettings: {
+                            RtmpGroupSettings: {
+                                AuthenticationScheme: 'COMMON',
+                                CacheFullBehavior: 'DISCONNECT_IMMEDIATELY',
+                                CacheLength: 30,
+                                CaptionData: 'ALL',
+                                RestartDelay: 15
+                            }
+                        },
+                        Outputs: [{
+                            OutputName: 'rtmp_output',
+                            VideoDescriptionName: 'video_1080p30',
+                            AudioDescriptionNames: ['audio_aac'],
+                            OutputSettings: {
+                                RtmpOutputSettings: {
+                                    Destination: {
+                                        DestinationRefId: 'rtmp-destination'
+                                    },
+                                    CertificateMode: 'SELF_SIGNED',
+                                    ConnectionRetryInterval: 2,
+                                    NumRetries: 3
+                                }
+                            }
+                        }]
+                    }],
+                    TimecodeConfig: {
+                        Source: 'EMBEDDED'
+                    }
                 }
             },
             twitch: {
                 name: 'Twitch Streaming Channel',
                 description: 'Dynamic MediaLive channel for Twitch streaming',
                 encoderSettings: {
-                    videoDescriptions: [{
-                        name: 'video_1080p60',
-                        codecSettings: {
-                            h264Settings: {
-                                profile: 'HIGH',
-                                level: 'H264_LEVEL_4_1',
-                                rateControlMode: 'CBR',
-                                bitrate: 6000000,
-                                framerateControl: 'SPECIFIED',
-                                framerateNumerator: 60,
-                                framerateDenominator: 1,
-                                gopSize: 120,
-                                gopSizeUnits: 'FRAMES'
+                    VideoDescriptions: [{
+                        Name: 'video_1080p60',
+                        CodecSettings: {
+                            H264Settings: {
+                                Profile: 'HIGH',
+                                Level: 'H264_LEVEL_4_1',
+                                RateControlMode: 'CBR',
+                                Bitrate: 6000000,
+                                FramerateControl: 'SPECIFIED',
+                                FramerateNumerator: 60,
+                                FramerateDenominator: 1,
+                                GopSize: 120,
+                                GopSizeUnits: 'FRAMES'
                             }
                         },
-                        width: 1920,
-                        height: 1080
+                        Width: 1920,
+                        Height: 1080
                     }],
-                    audioDescriptions: [{
-                        name: 'audio_aac',
-                        codecSettings: {
-                            aacSettings: {
-                                bitrate: 128000,
-                                codingMode: 'CODING_MODE_2_0',
-                                sampleRate: 48000
+                    AudioDescriptions: [{
+                        Name: 'audio_aac',
+                        AudioSelectorName: 'default-audio-selector',
+                        CodecSettings: {
+                            AacSettings: {
+                                Bitrate: 128000,
+                                CodingMode: 'CODING_MODE_2_0',
+                                SampleRate: 48000
                             }
                         }
-                    }]
+                    }],
+                    OutputGroups: [{
+                        Name: 'RTMP_Output_Group',
+                        OutputGroupSettings: {
+                            RtmpGroupSettings: {
+                                AuthenticationScheme: 'COMMON',
+                                CacheFullBehavior: 'DISCONNECT_IMMEDIATELY',
+                                CacheLength: 30,
+                                CaptionData: 'ALL',
+                                RestartDelay: 15
+                            }
+                        },
+                        Outputs: [{
+                            OutputName: 'rtmp_output',
+                            VideoDescriptionName: 'video_1080p60',
+                            AudioDescriptionNames: ['audio_aac'],
+                            OutputSettings: {
+                                RtmpOutputSettings: {
+                                    Destination: {
+                                        DestinationRefId: 'rtmp-destination'
+                                    },
+                                    CertificateMode: 'SELF_SIGNED',
+                                    ConnectionRetryInterval: 2,
+                                    NumRetries: 3
+                                }
+                            }
+                        }]
+                    }],
+                    TimecodeConfig: {
+                        Source: 'EMBEDDED'
+                    }
                 }
             },
             linkedin: {
                 name: 'LinkedIn Streaming Channel',
                 description: 'Dynamic MediaLive channel for LinkedIn streaming',
                 encoderSettings: {
-                    videoDescriptions: [{
-                        name: 'video_720p30',
-                        codecSettings: {
-                            h264Settings: {
-                                profile: 'HIGH',
-                                level: 'H264_LEVEL_3_1',
-                                rateControlMode: 'CBR',
-                                bitrate: 3000000,
-                                framerateControl: 'SPECIFIED',
-                                framerateNumerator: 30,
-                                framerateDenominator: 1,
-                                gopSize: 60,
-                                gopSizeUnits: 'FRAMES'
+                    VideoDescriptions: [{
+                        Name: 'video_720p30',
+                        CodecSettings: {
+                            H264Settings: {
+                                Profile: 'HIGH',
+                                Level: 'H264_LEVEL_3_1',
+                                RateControlMode: 'CBR',
+                                Bitrate: 3000000,
+                                FramerateControl: 'SPECIFIED',
+                                FramerateNumerator: 30,
+                                FramerateDenominator: 1,
+                                GopSize: 60,
+                                GopSizeUnits: 'FRAMES'
                             }
                         },
-                        width: 1280,
-                        height: 720
+                        Width: 1280,
+                        Height: 720
                     }],
-                    audioDescriptions: [{
-                        name: 'audio_aac',
-                        codecSettings: {
-                            aacSettings: {
-                                bitrate: 128000,
-                                codingMode: 'CODING_MODE_2_0',
-                                sampleRate: 48000
+                    AudioDescriptions: [{
+                        Name: 'audio_aac',
+                        AudioSelectorName: 'default-audio-selector',
+                        CodecSettings: {
+                            AacSettings: {
+                                Bitrate: 128000,
+                                CodingMode: 'CODING_MODE_2_0',
+                                SampleRate: 48000
                             }
                         }
-                    }]
+                    }],
+                    OutputGroups: [{
+                        Name: 'RTMP_Output_Group',
+                        OutputGroupSettings: {
+                            RtmpGroupSettings: {
+                                AuthenticationScheme: 'COMMON',
+                                CacheFullBehavior: 'DISCONNECT_IMMEDIATELY',
+                                CacheLength: 30,
+                                CaptionData: 'ALL',
+                                RestartDelay: 15
+                            }
+                        },
+                        Outputs: [{
+                            OutputName: 'rtmp_output',
+                            VideoDescriptionName: 'video_720p30',
+                            AudioDescriptionNames: ['audio_aac'],
+                            OutputSettings: {
+                                RtmpOutputSettings: {
+                                    Destination: {
+                                        DestinationRefId: 'rtmp-destination'
+                                    },
+                                    CertificateMode: 'SELF_SIGNED',
+                                    ConnectionRetryInterval: 2,
+                                    NumRetries: 3
+                                }
+                            }
+                        }]
+                    }],
+                    TimecodeConfig: {
+                        Source: 'EMBEDDED'
+                    }
                 }
             },
             custom: {
                 name: 'Custom RTMP Channel',
                 description: 'Dynamic MediaLive channel for custom RTMP destinations',
                 encoderSettings: {
-                    videoDescriptions: [{
-                        name: 'video_1080p30',
-                        codecSettings: {
-                            h264Settings: {
-                                profile: 'HIGH',
-                                level: 'H264_LEVEL_4_1',
-                                rateControlMode: 'CBR',
-                                bitrate: 5000000,
-                                framerateControl: 'SPECIFIED',
-                                framerateNumerator: 30,
-                                framerateDenominator: 1,
-                                gopSize: 60,
-                                gopSizeUnits: 'FRAMES'
+                    VideoDescriptions: [{
+                        Name: 'video_1080p30',
+                        CodecSettings: {
+                            H264Settings: {
+                                Profile: 'HIGH',
+                                Level: 'H264_LEVEL_4_1',
+                                RateControlMode: 'CBR',
+                                Bitrate: 5000000,
+                                FramerateControl: 'SPECIFIED',
+                                FramerateNumerator: 30,
+                                FramerateDenominator: 1,
+                                GopSize: 60,
+                                GopSizeUnits: 'FRAMES'
                             }
                         },
-                        width: 1920,
-                        height: 1080
+                        Width: 1920,
+                        Height: 1080
                     }],
-                    audioDescriptions: [{
-                        name: 'audio_aac',
-                        codecSettings: {
-                            aacSettings: {
-                                bitrate: 128000,
-                                codingMode: 'CODING_MODE_2_0',
-                                sampleRate: 48000
+                    AudioDescriptions: [{
+                        Name: 'audio_aac',
+                        AudioSelectorName: 'default-audio-selector',
+                        CodecSettings: {
+                            AacSettings: {
+                                Bitrate: 128000,
+                                CodingMode: 'CODING_MODE_2_0',
+                                SampleRate: 48000
                             }
                         }
-                    }]
+                    }],
+                    OutputGroups: [{
+                        Name: 'RTMP_Output_Group',
+                        OutputGroupSettings: {
+                            RtmpGroupSettings: {
+                                AuthenticationScheme: 'COMMON',
+                                CacheFullBehavior: 'DISCONNECT_IMMEDIATELY',
+                                CacheLength: 30,
+                                CaptionData: 'ALL',
+                                RestartDelay: 15
+                            }
+                        },
+                        Outputs: [{
+                            OutputName: 'rtmp_output',
+                            VideoDescriptionName: 'video_1080p30',
+                            AudioDescriptionNames: ['audio_aac'],
+                            OutputSettings: {
+                                RtmpOutputSettings: {
+                                    Destination: {
+                                        DestinationRefId: 'rtmp-destination'
+                                    },
+                                    CertificateMode: 'SELF_SIGNED',
+                                    ConnectionRetryInterval: 2,
+                                    NumRetries: 3
+                                }
+                            }
+                        }]
+                    }],
+                    TimecodeConfig: {
+                        Source: 'EMBEDDED'
+                    }
                 }
             }
         };
@@ -228,10 +352,12 @@ class DynamicDestinationManager {
             
         } catch (error) {
             console.error('Error creating dynamic destination:', error);
-            
-            // Cleanup any partially created resources
-            await this.cleanupFailedDestination(destinationId);
-            
+
+            // Cleanup any partially created resources if destinationId was created
+            if (typeof destinationId !== 'undefined') {
+                await this.cleanupFailedDestination(destinationId);
+            }
+
             throw new Error(`Failed to create dynamic destination: ${error.message}`);
         }
     }
@@ -382,12 +508,16 @@ class DynamicDestinationManager {
      */
 
     async createMediaLiveInput(inputName) {
+        // First, create or get input security group
+        const securityGroupId = await this.getOrCreateInputSecurityGroup();
+
         const params = {
             Name: inputName,
             Type: 'RTP_PUSH',
             Destinations: [{
                 StreamName: inputName
             }],
+            InputSecurityGroups: [securityGroupId],
             Tags: {
                 Project: 'lunora-player',
                 Purpose: 'dynamic-streaming'
@@ -399,18 +529,64 @@ class DynamicDestinationManager {
         return result;
     }
 
+    async getOrCreateInputSecurityGroup() {
+        const securityGroupName = 'lunora-dynamic-streaming-security-group';
+
+        try {
+            // Try to find existing security group
+            const listResult = await this.mediaLive.listInputSecurityGroups().promise();
+            const existingGroup = listResult.InputSecurityGroups.find(
+                group => group.Tags && group.Tags.Name === securityGroupName
+            );
+
+            if (existingGroup) {
+                console.log(`Using existing input security group: ${existingGroup.Id}`);
+                return existingGroup.Id;
+            }
+
+            // Create new security group
+            const createParams = {
+                WhitelistRules: [{
+                    Cidr: '0.0.0.0/0'  // Allow MediaConnect's dynamic IPs
+                }],
+                Tags: {
+                    Name: securityGroupName,
+                    Project: 'lunora-player',
+                    Purpose: 'dynamic-streaming-mediaconnect'
+                }
+            };
+
+            const createResult = await this.mediaLive.createInputSecurityGroup(createParams).promise();
+            console.log(`Created input security group: ${createResult.SecurityGroup.Id}`);
+            return createResult.SecurityGroup.Id;
+
+        } catch (error) {
+            console.error('Error managing input security group:', error);
+            throw error;
+        }
+    }
+
     async createMediaConnectOutput(outputName, mediaLiveInput) {
         const inputDestination = mediaLiveInput.Input.Destinations[0];
 
+        // Extract IP address from RTP URL (format: rtp://IP:PORT)
+        const urlMatch = inputDestination.Url.match(/rtp:\/\/([^:]+):(\d+)/);
+        if (!urlMatch) {
+            throw new Error(`Invalid MediaLive input URL format: ${inputDestination.Url}`);
+        }
+
+        const destinationIp = urlMatch[1];
+        const destinationPort = parseInt(urlMatch[2]);
+
         const params = {
             FlowArn: this.config.mediaConnectFlowArn,
-            Output: {
+            Outputs: [{
                 Name: outputName,
                 Protocol: 'rtp-fec',
-                Destination: inputDestination.Url,
-                Port: inputDestination.Port || 5000,
+                Destination: destinationIp,
+                Port: destinationPort,
                 Description: `Dynamic output for ${outputName}`
-            }
+            }]
         };
 
         const result = await this.mediaConnect.addFlowOutputs(params).promise();
@@ -423,7 +599,8 @@ class DynamicDestinationManager {
 
         const params = {
             Name: channelName,
-            RoleArn: `arn:aws:iam::${this.config.accountId}:role/MediaLiveAccessRole`,
+            ChannelClass: 'SINGLE_PIPELINE',
+            RoleArn: `arn:aws:iam::${this.config.accountId}:role/lunora-player-prod-medialive-role`,
             InputSpecification: {
                 Codec: 'AVC',
                 MaximumBitrate: 'MAX_50_MBPS',
@@ -433,11 +610,25 @@ class DynamicDestinationManager {
                 InputId: mediaLiveInput.Input.Id,
                 InputAttachmentName: `${channelName}_input`,
                 InputSettings: {
-                    SourceEndBehavior: 'CONTINUE'
+                    SourceEndBehavior: 'CONTINUE',
+                    AudioSelectors: [{
+                        Name: 'default-audio-selector',
+                        SelectorSettings: {
+                            AudioTrackSelection: {
+                                Tracks: [{
+                                    Track: 1
+                                }]
+                            }
+                        }
+                    }],
+                    VideoSelector: {
+                        ColorSpace: 'FOLLOW',
+                        ColorSpaceUsage: 'FALLBACK'
+                    }
                 }
             }],
             Destinations: [{
-                Id: 'rtmp_destination',
+                Id: 'rtmp-destination',
                 Settings: [{
                     Url: rtmpUrl,
                     StreamName: streamKey,

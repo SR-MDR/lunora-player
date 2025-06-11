@@ -1,0 +1,8 @@
+{
+  "timestamp": "2025-06-11T04:11:18Z",
+  "project_name": "lunora-player",
+  "environment": "prod",
+  "aws_region": "us-west-2",
+  "stack_name": "lunora-player-prod-dynamic-streaming",
+  "backup_reason": "Pre-dynamic-streaming-deployment"
+}

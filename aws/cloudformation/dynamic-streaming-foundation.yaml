@@ -102,7 +102,20 @@ Resources:
                   - medialive:DeleteInput
                   - medialive:DescribeInput
                   - medialive:ListInputs
+                  - medialive:CreateTags
+                  - medialive:DeleteTags
+                  - medialive:ListTagsForResource
+                  - medialive:CreateInputSecurityGroup
+                  - medialive:DeleteInputSecurityGroup
+                  - medialive:DescribeInputSecurityGroup
+                  - medialive:ListInputSecurityGroups
+                  - medialive:UpdateInputSecurityGroup
                 Resource: '*'
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/lunora-player-prod-medialive-role'
               
               # Parameter Store permissions
               - Effect: Allow
