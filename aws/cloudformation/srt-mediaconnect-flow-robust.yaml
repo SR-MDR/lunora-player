@@ -41,57 +41,8 @@ Resources:
         MaxBitrate: 50000000  # 50 Mbps max
         # Note: Encryption will be configured separately if needed
 
-  # MediaConnect Outputs - One for each MediaLive channel
-  # RTP-FEC uses port, port+2, and port+4, so we need spacing of at least 5 ports
-  PrimaryChannelOutput:
-    Type: AWS::MediaConnect::FlowOutput
-    Properties:
-      FlowArn: !GetAtt SRTMediaConnectFlow.FlowArn
-      Name: 'primary-channel-output'
-      Description: 'Output to Primary MediaLive Channel (HLS)'
-      Protocol: 'rtp-fec'
-      Port: 5000
-      Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
-
-  YouTubeChannelOutput:
-    Type: AWS::MediaConnect::FlowOutput
-    Properties:
-      FlowArn: !GetAtt SRTMediaConnectFlow.FlowArn
-      Name: 'youtube-channel-output'
-      Description: 'Output to YouTube MediaLive Channel'
-      Protocol: 'rtp-fec'
-      Port: 5010
-      Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
-
-  TwitchChannelOutput:
-    Type: AWS::MediaConnect::FlowOutput
-    Properties:
-      FlowArn: !GetAtt SRTMediaConnectFlow.FlowArn
-      Name: 'twitch-channel-output'
-      Description: 'Output to Twitch MediaLive Channel'
-      Protocol: 'rtp-fec'
-      Port: 5020
-      Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
-
-  LinkedInChannelOutput:
-    Type: AWS::MediaConnect::FlowOutput
-    Properties:
-      FlowArn: !GetAtt SRTMediaConnectFlow.FlowArn
-      Name: 'linkedin-channel-output'
-      Description: 'Output to LinkedIn MediaLive Channel'
-      Protocol: 'rtp-fec'
-      Port: 5030
-      Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
-
-  CustomChannelOutput:
-    Type: AWS::MediaConnect::FlowOutput
-    Properties:
-      FlowArn: !GetAtt SRTMediaConnectFlow.FlowArn
-      Name: 'custom-channel-output'
-      Description: 'Output to Custom MediaLive Channel'
-      Protocol: 'rtp-fec'
-      Port: 5040
-      Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
+  # Note: MediaLive channels will connect directly to the MediaConnect flow
+  # No separate outputs needed - each MediaLive input will reference the flow ARN
 
   # CloudWatch Alarms for Monitoring
   MediaConnectFlowAlarm:
@@ -136,36 +87,12 @@ Outputs:
     Export:
       Name: !Sub '${ProjectName}-${Environment}-srt-ingest-endpoint'
 
-  # Output ARNs for MediaLive channel configuration
-  PrimaryOutputArn:
-    Description: 'Primary Channel Output ARN'
-    Value: !GetAtt PrimaryChannelOutput.OutputArn
+  # MediaConnect Flow ARN for MediaLive channel configuration
+  MediaConnectFlowArn:
+    Description: 'MediaConnect Flow ARN for all MediaLive channels'
+    Value: !GetAtt SRTMediaConnectFlow.FlowArn
     Export:
-      Name: !Sub '${ProjectName}-${Environment}-primary-output-arn'
-
-  YouTubeOutputArn:
-    Description: 'YouTube Channel Output ARN'
-    Value: !GetAtt YouTubeChannelOutput.OutputArn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-youtube-output-arn'
-
-  TwitchOutputArn:
-    Description: 'Twitch Channel Output ARN'
-    Value: !GetAtt TwitchChannelOutput.OutputArn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-twitch-output-arn'
-
-  LinkedInOutputArn:
-    Description: 'LinkedIn Channel Output ARN'
-    Value: !GetAtt LinkedInChannelOutput.OutputArn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-linkedin-output-arn'
-
-  CustomOutputArn:
-    Description: 'Custom Channel Output ARN'
-    Value: !GetAtt CustomChannelOutput.OutputArn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-custom-output-arn'
+      Name: !Sub '${ProjectName}-${Environment}-mediaconnect-flow-arn'
 
   MediaConnectAlarmTopicArn:
     Description: 'SNS Topic ARN for MediaConnect Alerts'

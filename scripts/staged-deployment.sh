@@ -98,41 +98,6 @@ SRT_ENDPOINT=$(aws cloudformation describe-stacks \
     --query 'Stacks[0].Outputs[?OutputKey==`SRTIngestEndpoint`].OutputValue' \
     --output text)
 
-PRIMARY_OUTPUT_ARN=$(aws cloudformation describe-stacks \
-    --stack-name ${PROJECT_NAME}-${ENVIRONMENT}-srt-mediaconnect \
-    --region $REGION \
-    --profile $PROFILE \
-    --query 'Stacks[0].Outputs[?OutputKey==`PrimaryOutputArn`].OutputValue' \
-    --output text)
-
-YOUTUBE_OUTPUT_ARN=$(aws cloudformation describe-stacks \
-    --stack-name ${PROJECT_NAME}-${ENVIRONMENT}-srt-mediaconnect \
-    --region $REGION \
-    --profile $PROFILE \
-    --query 'Stacks[0].Outputs[?OutputKey==`YouTubeOutputArn`].OutputValue' \
-    --output text)
-
-TWITCH_OUTPUT_ARN=$(aws cloudformation describe-stacks \
-    --stack-name ${PROJECT_NAME}-${ENVIRONMENT}-srt-mediaconnect \
-    --region $REGION \
-    --profile $PROFILE \
-    --query 'Stacks[0].Outputs[?OutputKey==`TwitchOutputArn`].OutputValue' \
-    --output text)
-
-LINKEDIN_OUTPUT_ARN=$(aws cloudformation describe-stacks \
-    --stack-name ${PROJECT_NAME}-${ENVIRONMENT}-srt-mediaconnect \
-    --region $REGION \
-    --profile $PROFILE \
-    --query 'Stacks[0].Outputs[?OutputKey==`LinkedInOutputArn`].OutputValue' \
-    --output text)
-
-CUSTOM_OUTPUT_ARN=$(aws cloudformation describe-stacks \
-    --stack-name ${PROJECT_NAME}-${ENVIRONMENT}-srt-mediaconnect \
-    --region $REGION \
-    --profile $PROFILE \
-    --query 'Stacks[0].Outputs[?OutputKey==`CustomOutputArn`].OutputValue' \
-    --output text)
-
 print_status "MediaConnect Flow deployed successfully"
 echo "Flow ARN: $FLOW_ARN"
 echo "SRT Endpoint: $SRT_ENDPOINT"
@@ -150,11 +115,7 @@ aws cloudformation deploy \
     --parameter-overrides \
         ProjectName=$PROJECT_NAME \
         Environment=$ENVIRONMENT \
-        PrimaryOutputArn=$PRIMARY_OUTPUT_ARN \
-        YouTubeOutputArn=$YOUTUBE_OUTPUT_ARN \
-        TwitchOutputArn=$TWITCH_OUTPUT_ARN \
-        LinkedInOutputArn=$LINKEDIN_OUTPUT_ARN \
-        CustomOutputArn=$CUSTOM_OUTPUT_ARN
+        MediaConnectFlowArn=$FLOW_ARN
 
 # Get MediaLive Channel IDs
 print_status "Retrieving MediaLive Channel IDs..."

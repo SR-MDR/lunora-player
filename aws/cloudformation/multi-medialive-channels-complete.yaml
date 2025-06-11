@@ -13,25 +13,9 @@ Parameters:
     AllowedValues: ['dev', 'staging', 'prod']
     Description: 'Environment name'
   
-  PrimaryOutputArn:
+  MediaConnectFlowArn:
     Type: String
-    Description: 'MediaConnect Primary Output ARN'
-  
-  YouTubeOutputArn:
-    Type: String
-    Description: 'MediaConnect YouTube Output ARN'
-  
-  TwitchOutputArn:
-    Type: String
-    Description: 'MediaConnect Twitch Output ARN'
-  
-  LinkedInOutputArn:
-    Type: String
-    Description: 'MediaConnect LinkedIn Output ARN'
-  
-  CustomOutputArn:
-    Type: String
-    Description: 'MediaConnect Custom Output ARN'
+    Description: 'MediaConnect Flow ARN for all channels'
 
 Resources:
   # IAM Role for MediaLive (Enhanced Security)
@@ -65,14 +49,14 @@ Resources:
                   - 'logs:PutLogEvents'
                 Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
 
-  # MediaLive Inputs - One per MediaConnect output
+  # MediaLive Inputs - All use the same MediaConnect flow
   PrimaryMediaLiveInput:
     Type: AWS::MediaLive::Input
     Properties:
       Name: !Sub '${ProjectName}-${Environment}-primary-input'
       Type: 'MEDIACONNECT'
       MediaConnectFlows:
-        - FlowArn: !Ref PrimaryOutputArn
+        - FlowArn: !Ref MediaConnectFlowArn
 
   YouTubeMediaLiveInput:
     Type: AWS::MediaLive::Input
@@ -80,7 +64,7 @@ Resources:
       Name: !Sub '${ProjectName}-${Environment}-youtube-input'
       Type: 'MEDIACONNECT'
       MediaConnectFlows:
-        - FlowArn: !Ref YouTubeOutputArn
+        - FlowArn: !Ref MediaConnectFlowArn
 
   TwitchMediaLiveInput:
     Type: AWS::MediaLive::Input
@@ -88,7 +72,7 @@ Resources:
       Name: !Sub '${ProjectName}-${Environment}-twitch-input'
       Type: 'MEDIACONNECT'
       MediaConnectFlows:
-        - FlowArn: !Ref TwitchOutputArn
+        - FlowArn: !Ref MediaConnectFlowArn
 
   LinkedInMediaLiveInput:
     Type: AWS::MediaLive::Input
@@ -96,7 +80,7 @@ Resources:
       Name: !Sub '${ProjectName}-${Environment}-linkedin-input'
       Type: 'MEDIACONNECT'
       MediaConnectFlows:
-        - FlowArn: !Ref LinkedInOutputArn
+        - FlowArn: !Ref MediaConnectFlowArn
 
   CustomMediaLiveInput:
     Type: AWS::MediaLive::Input
@@ -104,7 +88,7 @@ Resources:
       Name: !Sub '${ProjectName}-${Environment}-custom-input'
       Type: 'MEDIACONNECT'
       MediaConnectFlows:
-        - FlowArn: !Ref CustomOutputArn
+        - FlowArn: !Ref MediaConnectFlowArn
 
   # Primary MediaLive Channel (HLS Output to MediaPackage)
   PrimaryMediaLiveChannel:
