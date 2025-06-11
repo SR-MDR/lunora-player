@@ -144,6 +144,7 @@ Resources:
         - Id: 'youtube-rtmp-destination'
           Settings:
             - Url: 'rtmp://a.rtmp.youtube.com/live2'
+              StreamName: 'youtube-stream-key'
       EncoderSettings:
         TimecodeConfig:
           Source: 'EMBEDDED'
@@ -207,6 +208,7 @@ Resources:
         - Id: 'twitch-rtmp-destination'
           Settings:
             - Url: 'rtmp://live.twitch.tv/live'
+              StreamName: 'twitch-stream-key'
       EncoderSettings:
         TimecodeConfig:
           Source: 'EMBEDDED'
@@ -270,6 +272,7 @@ Resources:
         - Id: 'linkedin-rtmp-destination'
           Settings:
             - Url: 'rtmp://1-b.rtmp.livepush.io/live'
+              StreamName: 'linkedin-stream-key'
       EncoderSettings:
         TimecodeConfig:
           Source: 'EMBEDDED'
@@ -333,6 +336,7 @@ Resources:
         - Id: 'custom-rtmp-destination'
           Settings:
             - Url: 'rtmp://example.com/live'
+              StreamName: 'custom-stream-key'
       EncoderSettings:
         TimecodeConfig:
           Source: 'EMBEDDED'
