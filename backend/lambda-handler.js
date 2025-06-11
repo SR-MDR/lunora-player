@@ -1,5 +1,7 @@
 // Lunora Player - Lambda Handler for Multi-Destination Streaming API
 const AWS = require('aws-sdk');
+const RobustMultiChannelManager = require('./multi-channel-manager-robust');
+const SchemaMigration = require('./schema-migration');
 
 // AWS Configuration
 AWS.config.update({
@@ -12,6 +14,9 @@ const medialive = new AWS.MediaLive();
 const s3 = new AWS.S3();
 const mediapackage = new AWS.MediaPackage();
 const cloudfront = new AWS.CloudFront();
+
+// Initialize multi-channel manager
+const multiChannelManager = new RobustMultiChannelManager();
 
 // Configuration
 const CONFIG = {
@@ -953,6 +958,209 @@ const getCostInformation = async () => {
     }
 };
 
+// Multi-Channel Management Functions
+const getMultiChannelStatus = async () => {
+    try {
+        const result = await multiChannelManager.getAllChannelStatuses();
+        const flowStatus = await multiChannelManager.getMediaConnectFlowStatus();
+
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            mediaconnect_flow: flowStatus,
+            channels: result.statuses,
+            errors: result.errors
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to get multi-channel status');
+    }
+};
+
+const startDestinationChannel = async (destinationId) => {
+    try {
+        // Get destination details
+        const destination = await dynamodb.get({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: destinationId }
+        }).promise();
+
+        if (!destination.Item) {
+            return createResponse(404, {
+                status: 'error',
+                message: 'Destination not found'
+            });
+        }
+
+        const platform = destination.Item.platform;
+        const result = await multiChannelManager.startDestinationChannel(destinationId, platform);
+
+        // Update destination status in database
+        await dynamodb.update({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: destinationId },
+            UpdateExpression: 'SET channel_status = :status, last_channel_sync = :timestamp',
+            ExpressionAttributeValues: {
+                ':status': result.status,
+                ':timestamp': new Date().toISOString()
+            }
+        }).promise();
+
+        return createResponse(200, {
+            status: 'success',
+            message: result.message,
+            destination_id: destinationId,
+            platform: platform,
+            channel_id: result.channelId,
+            channel_status: result.status
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to start destination channel');
+    }
+};
+
+const stopDestinationChannel = async (destinationId) => {
+    try {
+        // Get destination details
+        const destination = await dynamodb.get({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: destinationId }
+        }).promise();
+
+        if (!destination.Item) {
+            return createResponse(404, {
+                status: 'error',
+                message: 'Destination not found'
+            });
+        }
+
+        const platform = destination.Item.platform;
+        const result = await multiChannelManager.stopDestinationChannel(destinationId, platform);
+
+        // Update destination status in database
+        await dynamodb.update({
+            TableName: CONFIG.dynamodb.destinationsTable,
+            Key: { destination_id: destinationId },
+            UpdateExpression: 'SET channel_status = :status, last_channel_sync = :timestamp',
+            ExpressionAttributeValues: {
+                ':status': result.status,
+                ':timestamp': new Date().toISOString()
+            }
+        }).promise();
+
+        return createResponse(200, {
+            status: 'success',
+            message: result.message,
+            destination_id: destinationId,
+            platform: platform,
+            channel_id: result.channelId,
+            channel_status: result.status
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to stop destination channel');
+    }
+};
+
+const getMediaConnectFlowStatus = async () => {
+    try {
+        const result = await multiChannelManager.getMediaConnectFlowStatus();
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            flow: result
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to get MediaConnect flow status');
+    }
+};
+
+const getInputHealthMonitoring = async () => {
+    try {
+        const result = await multiChannelManager.getInputHealthMonitoring();
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            input_health: result
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to get input health monitoring');
+    }
+};
+
+const validateChannelConfiguration = async () => {
+    try {
+        const result = await multiChannelManager.validateChannelConfiguration();
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            validation: result
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to validate channel configuration');
+    }
+};
+
+const runDatabaseMigration = async () => {
+    try {
+        const migration = new SchemaMigration();
+        const result = await migration.runFullMigration();
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            migration: result
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to run database migration');
+    }
+};
+
+const getAdminPlatforms = async () => {
+    try {
+        // Return available platforms and their configurations
+        const platforms = [
+            { id: 'youtube', name: 'YouTube Live', type: 'rtmp', default_preset: 'preset_youtube_1080p_optimized' },
+            { id: 'twitch', name: 'Twitch', type: 'rtmp', default_preset: 'preset_twitch_1080p_60fps' },
+            { id: 'linkedin', name: 'LinkedIn Live', type: 'rtmp', default_preset: 'preset_linkedin_720p_professional' },
+            { id: 'custom', name: 'Custom RTMP', type: 'rtmp', default_preset: 'preset_generic_1080p' },
+            { id: 'primary', name: 'Primary HLS', type: 'hls', default_preset: 'preset_generic_720p' }
+        ];
+
+        return createResponse(200, {
+            status: 'success',
+            platforms: platforms,
+            count: platforms.length
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to get admin platforms');
+    }
+};
+
+const getAdminPresets = async () => {
+    try {
+        // Get all presets with admin details
+        const result = await dynamodb.scan({
+            TableName: CONFIG.dynamodb.presetsTable
+        }).promise();
+
+        return createResponse(200, {
+            status: 'success',
+            presets: result.Items,
+            count: result.Items.length,
+            by_platform: result.Items.reduce((acc, preset) => {
+                if (!acc[preset.platform]) acc[preset.platform] = [];
+                acc[preset.platform].push(preset);
+                return acc;
+            }, {}),
+            by_type: result.Items.reduce((acc, preset) => {
+                if (!acc[preset.type]) acc[preset.type] = [];
+                acc[preset.type].push(preset);
+                return acc;
+            }, {})
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to get admin presets');
+    }
+};
+
 // Main Lambda handler
 exports.handler = async (event) => {
     console.log('Event:', JSON.stringify(event, null, 2));
@@ -1048,6 +1256,45 @@ exports.handler = async (event) => {
         if (path.match(/^\/api\/destinations\/[^\/]+\/stop$/) && httpMethod === 'POST') {
             const destinationId = path.split('/')[3];
             return await stopDestination(destinationId);
+        }
+
+        // New Multi-Channel Management Endpoints
+        if (path === '/api/channels/status' && httpMethod === 'GET') {
+            return await getMultiChannelStatus();
+        }
+
+        if (path.match(/^\/api\/destinations\/[^\/]+\/start-channel$/) && httpMethod === 'POST') {
+            const destinationId = path.split('/')[3];
+            return await startDestinationChannel(destinationId);
+        }
+
+        if (path.match(/^\/api\/destinations\/[^\/]+\/stop-channel$/) && httpMethod === 'POST') {
+            const destinationId = path.split('/')[3];
+            return await stopDestinationChannel(destinationId);
+        }
+
+        if (path === '/api/mediaconnect/flow/status' && httpMethod === 'GET') {
+            return await getMediaConnectFlowStatus();
+        }
+
+        if (path === '/api/mediaconnect/inputs/health' && httpMethod === 'GET') {
+            return await getInputHealthMonitoring();
+        }
+
+        if (path === '/api/channels/validate' && httpMethod === 'GET') {
+            return await validateChannelConfiguration();
+        }
+
+        if (path === '/api/migrate' && httpMethod === 'POST') {
+            return await runDatabaseMigration();
+        }
+
+        if (path === '/api/admin/platforms' && httpMethod === 'GET') {
+            return await getAdminPlatforms();
+        }
+
+        if (path === '/api/admin/presets' && httpMethod === 'GET') {
+            return await getAdminPresets();
         }
 
         // Default response for unmatched routes

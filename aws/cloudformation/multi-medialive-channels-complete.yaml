@@ -1,0 +1,537 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Complete 5-Channel MediaLive Setup for Granular RTMP Control'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'lunora-player'
+    Description: 'Project name for resource naming'
+  
+  Environment:
+    Type: String
+    Default: 'prod'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+  
+  PrimaryOutputArn:
+    Type: String
+    Description: 'MediaConnect Primary Output ARN'
+  
+  YouTubeOutputArn:
+    Type: String
+    Description: 'MediaConnect YouTube Output ARN'
+  
+  TwitchOutputArn:
+    Type: String
+    Description: 'MediaConnect Twitch Output ARN'
+  
+  LinkedInOutputArn:
+    Type: String
+    Description: 'MediaConnect LinkedIn Output ARN'
+  
+  CustomOutputArn:
+    Type: String
+    Description: 'MediaConnect Custom Output ARN'
+
+Resources:
+  # IAM Role for MediaLive (Enhanced Security)
+  MediaLiveRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-medialive-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: medialive.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: 'MediaLiveMinimalAccess'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'mediaconnect:DescribeFlow'
+                  - 'mediaconnect:DescribeFlowOutput'
+                  - 'mediapackage:DescribeChannel'
+                  - 'mediapackage:DescribeOriginEndpoint'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+
+  # MediaLive Inputs - One per MediaConnect output
+  PrimaryMediaLiveInput:
+    Type: AWS::MediaLive::Input
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-primary-input'
+      Type: 'MEDIACONNECT'
+      MediaConnectFlows:
+        - FlowArn: !Ref PrimaryOutputArn
+
+  YouTubeMediaLiveInput:
+    Type: AWS::MediaLive::Input
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-youtube-input'
+      Type: 'MEDIACONNECT'
+      MediaConnectFlows:
+        - FlowArn: !Ref YouTubeOutputArn
+
+  TwitchMediaLiveInput:
+    Type: AWS::MediaLive::Input
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-twitch-input'
+      Type: 'MEDIACONNECT'
+      MediaConnectFlows:
+        - FlowArn: !Ref TwitchOutputArn
+
+  LinkedInMediaLiveInput:
+    Type: AWS::MediaLive::Input
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-linkedin-input'
+      Type: 'MEDIACONNECT'
+      MediaConnectFlows:
+        - FlowArn: !Ref LinkedInOutputArn
+
+  CustomMediaLiveInput:
+    Type: AWS::MediaLive::Input
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-custom-input'
+      Type: 'MEDIACONNECT'
+      MediaConnectFlows:
+        - FlowArn: !Ref CustomOutputArn
+
+  # Primary MediaLive Channel (HLS Output to MediaPackage)
+  PrimaryMediaLiveChannel:
+    Type: AWS::MediaLive::Channel
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-primary-channel'
+      ChannelClass: 'SINGLE_PIPELINE'
+      RoleArn: !GetAtt MediaLiveRole.Arn
+      InputSpecification:
+        Codec: 'AVC'
+        MaximumBitrate: 'MAX_50_MBPS'
+        Resolution: 'HD'
+      Destinations:
+        - Id: 'mediapackage-destination'
+          MediaPackageSettings:
+            - ChannelId: !Sub '${ProjectName}-${Environment}-channel'
+      EncoderSettings:
+        OutputGroups:
+          - Name: 'HLS Output Group'
+            OutputGroupSettings:
+              MediaPackageGroupSettings:
+                Destination:
+                  DestinationRefId: 'mediapackage-destination'
+            Outputs:
+              - OutputName: 'HLS Output'
+                OutputSettings:
+                  MediaPackageOutputSettings: {}
+                VideoDescriptionName: 'video_720p30'
+                AudioDescriptionNames: ['audio_aac']
+        VideoDescriptions:
+          - Name: 'video_720p30'
+            CodecSettings:
+              H264Settings:
+                Bitrate: 3000000
+                FramerateControl: 'SPECIFIED'
+                FramerateNumerator: 30
+                FramerateDenominator: 1
+                GopSize: 60
+                GopSizeUnits: 'FRAMES'
+                Profile: 'HIGH'
+                Level: 'H264_LEVEL_3_1'
+                LookAheadRateControl: 'HIGH'
+                RateControlMode: 'CBR'
+        AudioDescriptions:
+          - Name: 'audio_aac'
+            CodecSettings:
+              AacSettings:
+                Bitrate: 128000
+                CodingMode: 'CODING_MODE_2_0'
+                SampleRate: 48000
+      InputAttachments:
+        - InputId: !Ref PrimaryMediaLiveInput
+          InputAttachmentName: 'primary-input'
+
+  # YouTube MediaLive Channel (RTMP Output)
+  YouTubeMediaLiveChannel:
+    Type: AWS::MediaLive::Channel
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-youtube-channel'
+      ChannelClass: 'SINGLE_PIPELINE'
+      RoleArn: !GetAtt MediaLiveRole.Arn
+      InputSpecification:
+        Codec: 'AVC'
+        MaximumBitrate: 'MAX_20_MBPS'
+        Resolution: 'HD'
+      Destinations:
+        - Id: 'youtube-rtmp-destination'
+          RtmpPushSettings:
+            - ConnectionRetryInterval: 2
+              NumRetries: 10
+      EncoderSettings:
+        OutputGroups:
+          - Name: 'YouTube RTMP Output'
+            OutputGroupSettings:
+              RtmpGroupSettings:
+                AuthenticationScheme: 'COMMON'
+                CacheFullBehavior: 'DISCONNECT_IMMEDIATELY'
+                CacheLength: 30
+                CaptionData: 'ALL'
+                RestartDelay: 15
+            Outputs:
+              - OutputName: 'YouTube Stream'
+                OutputSettings:
+                  RtmpOutputSettings:
+                    Destination:
+                      DestinationRefId: 'youtube-rtmp-destination'
+                    ConnectionRetryInterval: 2
+                    NumRetries: 10
+                VideoDescriptionName: 'video_1080p30'
+                AudioDescriptionNames: ['audio_aac']
+        VideoDescriptions:
+          - Name: 'video_1080p30'
+            CodecSettings:
+              H264Settings:
+                Bitrate: 6000000
+                FramerateControl: 'SPECIFIED'
+                FramerateNumerator: 30
+                FramerateDenominator: 1
+                GopSize: 60
+                GopSizeUnits: 'FRAMES'
+                Profile: 'HIGH'
+                Level: 'H264_LEVEL_4_1'
+                LookAheadRateControl: 'HIGH'
+                RateControlMode: 'CBR'
+        AudioDescriptions:
+          - Name: 'audio_aac'
+            CodecSettings:
+              AacSettings:
+                Bitrate: 128000
+                CodingMode: 'CODING_MODE_2_0'
+                SampleRate: 48000
+      InputAttachments:
+        - InputId: !Ref YouTubeMediaLiveInput
+          InputAttachmentName: 'youtube-input'
+
+  # Twitch MediaLive Channel (RTMP Output)
+  TwitchMediaLiveChannel:
+    Type: AWS::MediaLive::Channel
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-twitch-channel'
+      ChannelClass: 'SINGLE_PIPELINE'
+      RoleArn: !GetAtt MediaLiveRole.Arn
+      InputSpecification:
+        Codec: 'AVC'
+        MaximumBitrate: 'MAX_20_MBPS'
+        Resolution: 'HD'
+      Destinations:
+        - Id: 'twitch-rtmp-destination'
+          RtmpPushSettings:
+            - ConnectionRetryInterval: 2
+              NumRetries: 10
+      EncoderSettings:
+        OutputGroups:
+          - Name: 'Twitch RTMP Output'
+            OutputGroupSettings:
+              RtmpGroupSettings:
+                AuthenticationScheme: 'COMMON'
+                CacheFullBehavior: 'DISCONNECT_IMMEDIATELY'
+                CacheLength: 30
+                CaptionData: 'ALL'
+                RestartDelay: 15
+            Outputs:
+              - OutputName: 'Twitch Stream'
+                OutputSettings:
+                  RtmpOutputSettings:
+                    Destination:
+                      DestinationRefId: 'twitch-rtmp-destination'
+                    ConnectionRetryInterval: 2
+                    NumRetries: 10
+                VideoDescriptionName: 'video_1080p60'
+                AudioDescriptionNames: ['audio_aac']
+        VideoDescriptions:
+          - Name: 'video_1080p60'
+            CodecSettings:
+              H264Settings:
+                Bitrate: 6000000
+                FramerateControl: 'SPECIFIED'
+                FramerateNumerator: 60
+                FramerateDenominator: 1
+                GopSize: 120
+                GopSizeUnits: 'FRAMES'
+                Profile: 'HIGH'
+                Level: 'H264_LEVEL_4_1'
+                LookAheadRateControl: 'HIGH'
+                RateControlMode: 'CBR'
+        AudioDescriptions:
+          - Name: 'audio_aac'
+            CodecSettings:
+              AacSettings:
+                Bitrate: 128000
+                CodingMode: 'CODING_MODE_2_0'
+                SampleRate: 48000
+      InputAttachments:
+        - InputId: !Ref TwitchMediaLiveInput
+          InputAttachmentName: 'twitch-input'
+
+  # LinkedIn MediaLive Channel (RTMP Output)
+  LinkedInMediaLiveChannel:
+    Type: AWS::MediaLive::Channel
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-linkedin-channel'
+      ChannelClass: 'SINGLE_PIPELINE'
+      RoleArn: !GetAtt MediaLiveRole.Arn
+      InputSpecification:
+        Codec: 'AVC'
+        MaximumBitrate: 'MAX_20_MBPS'
+        Resolution: 'HD'
+      Destinations:
+        - Id: 'linkedin-rtmp-destination'
+          RtmpPushSettings:
+            - ConnectionRetryInterval: 2
+              NumRetries: 10
+      EncoderSettings:
+        OutputGroups:
+          - Name: 'LinkedIn RTMP Output'
+            OutputGroupSettings:
+              RtmpGroupSettings:
+                AuthenticationScheme: 'COMMON'
+                CacheFullBehavior: 'DISCONNECT_IMMEDIATELY'
+                CacheLength: 30
+                CaptionData: 'ALL'
+                RestartDelay: 15
+            Outputs:
+              - OutputName: 'LinkedIn Stream'
+                OutputSettings:
+                  RtmpOutputSettings:
+                    Destination:
+                      DestinationRefId: 'linkedin-rtmp-destination'
+                    ConnectionRetryInterval: 2
+                    NumRetries: 10
+                VideoDescriptionName: 'video_720p30'
+                AudioDescriptionNames: ['audio_aac']
+        VideoDescriptions:
+          - Name: 'video_720p30'
+            CodecSettings:
+              H264Settings:
+                Bitrate: 2500000
+                FramerateControl: 'SPECIFIED'
+                FramerateNumerator: 30
+                FramerateDenominator: 1
+                GopSize: 60
+                GopSizeUnits: 'FRAMES'
+                Profile: 'MAIN'
+                Level: 'H264_LEVEL_3_1'
+                LookAheadRateControl: 'HIGH'
+                RateControlMode: 'CBR'
+        AudioDescriptions:
+          - Name: 'audio_aac'
+            CodecSettings:
+              AacSettings:
+                Bitrate: 128000
+                CodingMode: 'CODING_MODE_2_0'
+                SampleRate: 48000
+      InputAttachments:
+        - InputId: !Ref LinkedInMediaLiveInput
+          InputAttachmentName: 'linkedin-input'
+
+  # Custom MediaLive Channel (RTMP Output)
+  CustomMediaLiveChannel:
+    Type: AWS::MediaLive::Channel
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-custom-channel'
+      ChannelClass: 'SINGLE_PIPELINE'
+      RoleArn: !GetAtt MediaLiveRole.Arn
+      InputSpecification:
+        Codec: 'AVC'
+        MaximumBitrate: 'MAX_20_MBPS'
+        Resolution: 'HD'
+      Destinations:
+        - Id: 'custom-rtmp-destination'
+          RtmpPushSettings:
+            - ConnectionRetryInterval: 2
+              NumRetries: 10
+      EncoderSettings:
+        OutputGroups:
+          - Name: 'Custom RTMP Output'
+            OutputGroupSettings:
+              RtmpGroupSettings:
+                AuthenticationScheme: 'COMMON'
+                CacheFullBehavior: 'DISCONNECT_IMMEDIATELY'
+                CacheLength: 30
+                CaptionData: 'ALL'
+                RestartDelay: 15
+            Outputs:
+              - OutputName: 'Custom Stream'
+                OutputSettings:
+                  RtmpOutputSettings:
+                    Destination:
+                      DestinationRefId: 'custom-rtmp-destination'
+                    ConnectionRetryInterval: 2
+                    NumRetries: 10
+                VideoDescriptionName: 'video_1080p30'
+                AudioDescriptionNames: ['audio_aac']
+        VideoDescriptions:
+          - Name: 'video_1080p30'
+            CodecSettings:
+              H264Settings:
+                Bitrate: 5000000
+                FramerateControl: 'SPECIFIED'
+                FramerateNumerator: 30
+                FramerateDenominator: 1
+                GopSize: 60
+                GopSizeUnits: 'FRAMES'
+                Profile: 'HIGH'
+                Level: 'H264_LEVEL_4_1'
+                LookAheadRateControl: 'HIGH'
+                RateControlMode: 'CBR'
+        AudioDescriptions:
+          - Name: 'audio_aac'
+            CodecSettings:
+              AacSettings:
+                Bitrate: 128000
+                CodingMode: 'CODING_MODE_2_0'
+                SampleRate: 48000
+      InputAttachments:
+        - InputId: !Ref CustomMediaLiveInput
+          InputAttachmentName: 'custom-input'
+
+  # CloudWatch Alarms for each channel
+  PrimaryChannelAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-primary-channel-health'
+      AlarmDescription: 'Primary MediaLive Channel Health Monitoring'
+      MetricName: 'PipelineState'
+      Namespace: 'AWS/MediaLive'
+      Statistic: 'Average'
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: 'LessThanThreshold'
+      Dimensions:
+        - Name: 'ChannelId'
+          Value: !Ref PrimaryMediaLiveChannel
+        - Name: 'Pipeline'
+          Value: '0'
+      TreatMissingData: 'breaching'
+
+  YouTubeChannelAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-youtube-channel-health'
+      AlarmDescription: 'YouTube MediaLive Channel Health Monitoring'
+      MetricName: 'PipelineState'
+      Namespace: 'AWS/MediaLive'
+      Statistic: 'Average'
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: 'LessThanThreshold'
+      Dimensions:
+        - Name: 'ChannelId'
+          Value: !Ref YouTubeMediaLiveChannel
+        - Name: 'Pipeline'
+          Value: '0'
+      TreatMissingData: 'breaching'
+
+  TwitchChannelAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-twitch-channel-health'
+      AlarmDescription: 'Twitch MediaLive Channel Health Monitoring'
+      MetricName: 'PipelineState'
+      Namespace: 'AWS/MediaLive'
+      Statistic: 'Average'
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: 'LessThanThreshold'
+      Dimensions:
+        - Name: 'ChannelId'
+          Value: !Ref TwitchMediaLiveChannel
+        - Name: 'Pipeline'
+          Value: '0'
+      TreatMissingData: 'breaching'
+
+  LinkedInChannelAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-linkedin-channel-health'
+      AlarmDescription: 'LinkedIn MediaLive Channel Health Monitoring'
+      MetricName: 'PipelineState'
+      Namespace: 'AWS/MediaLive'
+      Statistic: 'Average'
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: 'LessThanThreshold'
+      Dimensions:
+        - Name: 'ChannelId'
+          Value: !Ref LinkedInMediaLiveChannel
+        - Name: 'Pipeline'
+          Value: '0'
+      TreatMissingData: 'breaching'
+
+  CustomChannelAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-custom-channel-health'
+      AlarmDescription: 'Custom MediaLive Channel Health Monitoring'
+      MetricName: 'PipelineState'
+      Namespace: 'AWS/MediaLive'
+      Statistic: 'Average'
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: 'LessThanThreshold'
+      Dimensions:
+        - Name: 'ChannelId'
+          Value: !Ref CustomMediaLiveChannel
+        - Name: 'Pipeline'
+          Value: '0'
+      TreatMissingData: 'breaching'
+
+Outputs:
+  PrimaryChannelId:
+    Description: 'Primary MediaLive Channel ID'
+    Value: !Ref PrimaryMediaLiveChannel
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-primary-channel-id'
+
+  YouTubeChannelId:
+    Description: 'YouTube MediaLive Channel ID'
+    Value: !Ref YouTubeMediaLiveChannel
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-youtube-channel-id'
+
+  TwitchChannelId:
+    Description: 'Twitch MediaLive Channel ID'
+    Value: !Ref TwitchMediaLiveChannel
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-twitch-channel-id'
+
+  LinkedInChannelId:
+    Description: 'LinkedIn MediaLive Channel ID'
+    Value: !Ref LinkedInMediaLiveChannel
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-linkedin-channel-id'
+
+  CustomChannelId:
+    Description: 'Custom MediaLive Channel ID'
+    Value: !Ref CustomMediaLiveChannel
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-custom-channel-id'
+
+  MediaLiveRoleArn:
+    Description: 'MediaLive IAM Role ARN'
+    Value: !GetAtt MediaLiveRole.Arn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-medialive-role-arn'

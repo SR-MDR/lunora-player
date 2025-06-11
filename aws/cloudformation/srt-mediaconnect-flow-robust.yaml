@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Robust SRT MediaConnect Flow with Multiple Outputs for Multi-MediaLive Distribution'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: 'lunora-player'
+    Description: 'Project name for resource naming'
+  
+  Environment:
+    Type: String
+    Default: 'prod'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: 'Environment name'
+  
+  VideonSourceIP:
+    Type: String
+    Description: 'Videon Edge Node IP address for security (use 0.0.0.0/0 for testing)'
+    Default: '0.0.0.0/0'
+  
+  SRTPort:
+    Type: Number
+    Default: 9998
+    Description: 'SRT listener port'
+    MinValue: 1024
+    MaxValue: 65535
+
+Resources:
+  # MediaConnect Flow with SRT Input and Multiple RTP-FEC Outputs
+  SRTMediaConnectFlow:
+    Type: AWS::MediaConnect::Flow
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-srt-router'
+      AvailabilityZone: !Sub '${AWS::Region}a'
+      Source:
+        Name: !Sub '${ProjectName}-videon-srt-source'
+        Description: 'SRT input from Videon Edge Node'
+        Protocol: 'srt-listener'
+        IngestPort: !Ref SRTPort
+        WhitelistCidr: !Ref VideonSourceIP
+        MaxBitrate: 50000000  # 50 Mbps max
+        # Note: Encryption will be configured separately if needed
+
+  # MediaConnect Outputs - One for each MediaLive channel
+  PrimaryChannelOutput:
+    Type: AWS::MediaConnect::FlowOutput
+    Properties:
+      FlowArn: !GetAtt SRTMediaConnectFlow.FlowArn
+      Name: 'primary-channel-output'
+      Description: 'Output to Primary MediaLive Channel (HLS)'
+      Protocol: 'rtp-fec'
+      Port: 5000
+      MaxLatency: 2000
+      Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
+
+  YouTubeChannelOutput:
+    Type: AWS::MediaConnect::FlowOutput
+    Properties:
+      FlowArn: !GetAtt SRTMediaConnectFlow.FlowArn
+      Name: 'youtube-channel-output'
+      Description: 'Output to YouTube MediaLive Channel'
+      Protocol: 'rtp-fec'
+      Port: 5001
+      MaxLatency: 2000
+      Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
+
+  TwitchChannelOutput:
+    Type: AWS::MediaConnect::FlowOutput
+    Properties:
+      FlowArn: !GetAtt SRTMediaConnectFlow.FlowArn
+      Name: 'twitch-channel-output'
+      Description: 'Output to Twitch MediaLive Channel'
+      Protocol: 'rtp-fec'
+      Port: 5002
+      MaxLatency: 2000
+      Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
+
+  LinkedInChannelOutput:
+    Type: AWS::MediaConnect::FlowOutput
+    Properties:
+      FlowArn: !GetAtt SRTMediaConnectFlow.FlowArn
+      Name: 'linkedin-channel-output'
+      Description: 'Output to LinkedIn MediaLive Channel'
+      Protocol: 'rtp-fec'
+      Port: 5003
+      MaxLatency: 2000
+      Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
+
+  CustomChannelOutput:
+    Type: AWS::MediaConnect::FlowOutput
+    Properties:
+      FlowArn: !GetAtt SRTMediaConnectFlow.FlowArn
+      Name: 'custom-channel-output'
+      Description: 'Output to Custom MediaLive Channel'
+      Protocol: 'rtp-fec'
+      Port: 5004
+      MaxLatency: 2000
+      Destination: '127.0.0.1'  # Will be updated to actual MediaLive input
+
+  # CloudWatch Alarms for Monitoring
+  MediaConnectFlowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-mediaconnect-flow-health'
+      AlarmDescription: 'MediaConnect Flow Health Monitoring'
+      MetricName: 'SourceHealth'
+      Namespace: 'AWS/MediaConnect'
+      Statistic: 'Average'
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: 'LessThanThreshold'
+      Dimensions:
+        - Name: 'FlowArn'
+          Value: !GetAtt SRTMediaConnectFlow.FlowArn
+      AlarmActions:
+        - !Ref MediaConnectAlarmTopic
+      TreatMissingData: 'breaching'
+
+  # SNS Topic for Alerts
+  MediaConnectAlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ProjectName}-${Environment}-mediaconnect-alerts'
+      DisplayName: 'MediaConnect Flow Alerts'
+
+Outputs:
+  MediaConnectFlowArn:
+    Description: 'SRT MediaConnect Flow ARN'
+    Value: !GetAtt SRTMediaConnectFlow.FlowArn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-srt-flow-arn'
+
+  SRTIngestEndpoint:
+    Description: 'SRT Ingest Endpoint for Videon'
+    Value: !Sub 
+      - 'srt://${IngestIp}:${Port}?streamid=lunora-primary-feed'
+      - IngestIp: !GetAtt SRTMediaConnectFlow.Source.IngestIp
+        Port: !Ref SRTPort
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-srt-ingest-endpoint'
+
+  # Output ARNs for MediaLive channel configuration
+  PrimaryOutputArn:
+    Description: 'Primary Channel Output ARN'
+    Value: !GetAtt PrimaryChannelOutput.OutputArn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-primary-output-arn'
+
+  YouTubeOutputArn:
+    Description: 'YouTube Channel Output ARN'
+    Value: !GetAtt YouTubeChannelOutput.OutputArn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-youtube-output-arn'
+
+  TwitchOutputArn:
+    Description: 'Twitch Channel Output ARN'
+    Value: !GetAtt TwitchChannelOutput.OutputArn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-twitch-output-arn'
+
+  LinkedInOutputArn:
+    Description: 'LinkedIn Channel Output ARN'
+    Value: !GetAtt LinkedInChannelOutput.OutputArn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-linkedin-output-arn'
+
+  CustomOutputArn:
+    Description: 'Custom Channel Output ARN'
+    Value: !GetAtt CustomChannelOutput.OutputArn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-custom-output-arn'
+
+  MediaConnectAlarmTopicArn:
+    Description: 'SNS Topic ARN for MediaConnect Alerts'
+    Value: !Ref MediaConnectAlarmTopic
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-mediaconnect-alarm-topic'
