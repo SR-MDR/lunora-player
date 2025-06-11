@@ -18,36 +18,8 @@ Parameters:
     Description: 'MediaConnect Flow ARN for all channels'
 
 Resources:
-  # IAM Role for MediaLive (Enhanced Security)
-  MediaLiveRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub '${ProjectName}-${Environment}-medialive-role'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: medialive.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: 'MediaLiveMinimalAccess'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'mediaconnect:DescribeFlow'
-                  - 'mediaconnect:DescribeFlowOutput'
-                  - 'mediapackage:DescribeChannel'
-                  - 'mediapackage:DescribeOriginEndpoint'
-                Resource: '*'
-              - Effect: Allow
-                Action:
-                  - 'logs:CreateLogGroup'
-                  - 'logs:CreateLogStream'
-                  - 'logs:PutLogEvents'
-                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+  # Import existing MediaLive Role from infrastructure stack
+  # MediaLiveRole is imported via Fn::ImportValue
 
   # MediaLive Inputs - All use the same MediaConnect flow
   PrimaryMediaLiveInput:
@@ -96,7 +68,8 @@ Resources:
     Properties:
       Name: !Sub '${ProjectName}-${Environment}-primary-channel'
       ChannelClass: 'SINGLE_PIPELINE'
-      RoleArn: !GetAtt MediaLiveRole.Arn
+      RoleArn:
+        Fn::ImportValue: !Sub '${ProjectName}-${Environment}-medialive-role-arn'
       InputSpecification:
         Codec: 'AVC'
         MaximumBitrate: 'MAX_50_MBPS'
@@ -149,7 +122,8 @@ Resources:
     Properties:
       Name: !Sub '${ProjectName}-${Environment}-youtube-channel'
       ChannelClass: 'SINGLE_PIPELINE'
-      RoleArn: !GetAtt MediaLiveRole.Arn
+      RoleArn:
+        Fn::ImportValue: !Sub '${ProjectName}-${Environment}-medialive-role-arn'
       InputSpecification:
         Codec: 'AVC'
         MaximumBitrate: 'MAX_20_MBPS'
@@ -210,7 +184,8 @@ Resources:
     Properties:
       Name: !Sub '${ProjectName}-${Environment}-twitch-channel'
       ChannelClass: 'SINGLE_PIPELINE'
-      RoleArn: !GetAtt MediaLiveRole.Arn
+      RoleArn:
+        Fn::ImportValue: !Sub '${ProjectName}-${Environment}-medialive-role-arn'
       InputSpecification:
         Codec: 'AVC'
         MaximumBitrate: 'MAX_20_MBPS'
@@ -271,7 +246,8 @@ Resources:
     Properties:
       Name: !Sub '${ProjectName}-${Environment}-linkedin-channel'
       ChannelClass: 'SINGLE_PIPELINE'
-      RoleArn: !GetAtt MediaLiveRole.Arn
+      RoleArn:
+        Fn::ImportValue: !Sub '${ProjectName}-${Environment}-medialive-role-arn'
       InputSpecification:
         Codec: 'AVC'
         MaximumBitrate: 'MAX_20_MBPS'
@@ -332,7 +308,8 @@ Resources:
     Properties:
       Name: !Sub '${ProjectName}-${Environment}-custom-channel'
       ChannelClass: 'SINGLE_PIPELINE'
-      RoleArn: !GetAtt MediaLiveRole.Arn
+      RoleArn:
+        Fn::ImportValue: !Sub '${ProjectName}-${Environment}-medialive-role-arn'
       InputSpecification:
         Codec: 'AVC'
         MaximumBitrate: 'MAX_20_MBPS'
@@ -514,8 +491,4 @@ Outputs:
     Export:
       Name: !Sub '${ProjectName}-${Environment}-custom-channel-id'
 
-  MediaLiveRoleArn:
-    Description: 'MediaLive IAM Role ARN'
-    Value: !GetAtt MediaLiveRole.Arn
-    Export:
-      Name: !Sub '${ProjectName}-${Environment}-medialive-role-arn'
+
