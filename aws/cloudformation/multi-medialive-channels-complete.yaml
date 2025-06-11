@@ -89,6 +89,8 @@ Resources:
           MediaPackageSettings:
             - ChannelId: !Sub '${ProjectName}-${Environment}-channel'
       EncoderSettings:
+        TimecodeConfig:
+          Source: 'EMBEDDED'
         OutputGroups:
           - Name: 'HLS Output Group'
             OutputGroupSettings:
@@ -138,12 +140,10 @@ Resources:
         Codec: 'AVC'
         MaximumBitrate: 'MAX_20_MBPS'
         Resolution: 'HD'
-      Destinations:
-        - Id: 'youtube-rtmp-destination'
-          RtmpPushSettings:
-            - ConnectionRetryInterval: 2
-              NumRetries: 10
+      Destinations: []
       EncoderSettings:
+        TimecodeConfig:
+          Source: 'EMBEDDED'
         OutputGroups:
           - Name: 'YouTube RTMP Output'
             OutputGroupSettings:
@@ -157,8 +157,7 @@ Resources:
               - OutputName: 'YouTube Stream'
                 OutputSettings:
                   RtmpOutputSettings:
-                    Destination:
-                      DestinationRefId: 'youtube-rtmp-destination'
+                    Destination: 'rtmp://a.rtmp.youtube.com/live2'
                     ConnectionRetryInterval: 2
                     NumRetries: 10
                 VideoDescriptionName: 'video_1080p30'
@@ -200,12 +199,10 @@ Resources:
         Codec: 'AVC'
         MaximumBitrate: 'MAX_20_MBPS'
         Resolution: 'HD'
-      Destinations:
-        - Id: 'twitch-rtmp-destination'
-          RtmpPushSettings:
-            - ConnectionRetryInterval: 2
-              NumRetries: 10
+      Destinations: []
       EncoderSettings:
+        TimecodeConfig:
+          Source: 'EMBEDDED'
         OutputGroups:
           - Name: 'Twitch RTMP Output'
             OutputGroupSettings:
@@ -219,8 +216,7 @@ Resources:
               - OutputName: 'Twitch Stream'
                 OutputSettings:
                   RtmpOutputSettings:
-                    Destination:
-                      DestinationRefId: 'twitch-rtmp-destination'
+                    Destination: 'rtmp://live.twitch.tv/live'
                     ConnectionRetryInterval: 2
                     NumRetries: 10
                 VideoDescriptionName: 'video_1080p60'
@@ -262,12 +258,10 @@ Resources:
         Codec: 'AVC'
         MaximumBitrate: 'MAX_20_MBPS'
         Resolution: 'HD'
-      Destinations:
-        - Id: 'linkedin-rtmp-destination'
-          RtmpPushSettings:
-            - ConnectionRetryInterval: 2
-              NumRetries: 10
+      Destinations: []
       EncoderSettings:
+        TimecodeConfig:
+          Source: 'EMBEDDED'
         OutputGroups:
           - Name: 'LinkedIn RTMP Output'
             OutputGroupSettings:
@@ -281,8 +275,7 @@ Resources:
               - OutputName: 'LinkedIn Stream'
                 OutputSettings:
                   RtmpOutputSettings:
-                    Destination:
-                      DestinationRefId: 'linkedin-rtmp-destination'
+                    Destination: 'rtmp://1-b.rtmp.livepush.io/live'
                     ConnectionRetryInterval: 2
                     NumRetries: 10
                 VideoDescriptionName: 'video_720p30'
@@ -324,12 +317,10 @@ Resources:
         Codec: 'AVC'
         MaximumBitrate: 'MAX_20_MBPS'
         Resolution: 'HD'
-      Destinations:
-        - Id: 'custom-rtmp-destination'
-          RtmpPushSettings:
-            - ConnectionRetryInterval: 2
-              NumRetries: 10
+      Destinations: []
       EncoderSettings:
+        TimecodeConfig:
+          Source: 'EMBEDDED'
         OutputGroups:
           - Name: 'Custom RTMP Output'
             OutputGroupSettings:
@@ -343,8 +334,7 @@ Resources:
               - OutputName: 'Custom Stream'
                 OutputSettings:
                   RtmpOutputSettings:
-                    Destination:
-                      DestinationRefId: 'custom-rtmp-destination'
+                    Destination: 'rtmp://example.com/live'
                     ConnectionRetryInterval: 2
                     NumRetries: 10
                 VideoDescriptionName: 'video_1080p30'
