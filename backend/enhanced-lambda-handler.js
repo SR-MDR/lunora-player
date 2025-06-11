@@ -57,16 +57,39 @@ exports.handler = async (event) => {
     console.log('Event:', JSON.stringify(event, null, 2));
 
     try {
-        const { httpMethod, path, pathParameters, body } = event;
-        const destinationId = pathParameters?.destinationId;
+        // Lambda Function URL event structure
+        const method = event.requestContext?.http?.method || event.httpMethod;
+        const path = event.requestContext?.http?.path || event.path || '/';
+        const body = event.body;
+
+        // Extract destination ID from path if present
+        const pathParts = path.split('/').filter(p => p);
+        let destinationId = null;
+
+        // Parse path for destination ID (e.g., /api/destinations/dest_123/start)
+        if (pathParts.length >= 3 && pathParts[0] === 'api' && pathParts[1] === 'destinations') {
+            destinationId = pathParts[2];
+        }
+
+        console.log(`Method: ${method}, Path: ${path}, DestinationId: ${destinationId}`);
 
         // Handle CORS preflight requests
-        if (httpMethod === 'OPTIONS') {
+        if (method === 'OPTIONS') {
             return createResponse(200, { message: 'CORS preflight' });
         }
 
+        // Health check endpoint
+        if (method === 'GET' && (path === '/' || path === '/health')) {
+            return createResponse(200, {
+                status: 'success',
+                message: 'Dynamic Streaming API is running',
+                timestamp: new Date().toISOString(),
+                version: '1.0.0'
+            });
+        }
+
         // Route requests to appropriate handlers
-        switch (httpMethod) {
+        switch (method) {
             case 'GET':
                 if (path === '/api/destinations') {
                     return await listDestinations();
@@ -92,13 +115,13 @@ exports.handler = async (event) => {
                 break;
 
             case 'PUT':
-                if (destinationId) {
+                if (destinationId && path.startsWith('/api/destinations/')) {
                     return await updateDestination(destinationId, body);
                 }
                 break;
 
             case 'DELETE':
-                if (destinationId) {
+                if (destinationId && path.startsWith('/api/destinations/')) {
                     return await deleteDestination(destinationId);
                 }
                 break;
@@ -106,7 +129,18 @@ exports.handler = async (event) => {
 
         return createResponse(404, {
             status: 'error',
-            message: 'Endpoint not found'
+            message: 'Endpoint not found',
+            path: path,
+            method: method,
+            available_endpoints: [
+                'GET /',
+                'GET /health',
+                'GET /api/destinations',
+                'POST /api/destinations',
+                'GET /api/destinations/status',
+                'GET /api/presets',
+                'GET /api/mediaconnect/flow/status'
+            ]
         });
 
     } catch (error) {
