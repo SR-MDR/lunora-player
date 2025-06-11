@@ -1,172 +1,235 @@
-# SRT → MediaConnect → Multi-MediaLive Implementation Prompt
+# Dynamic Multi-Destination Streaming Implementation Prompt
 
 ## 🎯 **Context & Objective**
 
-I need to implement a robust **SRT → MediaConnect → Multi-MediaLive** architecture for granular RTMP destination control. This replaces the previous MediaConnect RTMP output approach (which doesn't work due to AWS protocol limitations) with a multi-channel solution that provides true granular control for streaming to multiple platforms.
+I need to implement a **Dynamic MediaConnect + On-Demand MediaLive** architecture for true granular RTMP destination control. This approach uses AWS MediaConnect APIs (`add_flow_outputs`, `remove_flow_output`) to dynamically create and destroy MediaLive channels on-demand, providing cost-efficient granular control while supporting multiple instances of the same platform.
 
 ## 📊 **Current State**
 
 ### **Working Production System:**
-- **Current Branch**: `feature/mediaconnect-granular-control` (rolled back to commit `8a9d32e`)
+- **Current Branch**: `feature/srt-mediaconnect-multi-medialive-robust`
 - **Production Lambda**: `lunora-player-prod-multi-destination-api` (working)
-- **Frontend URLs**: 
+- **Frontend URLs**:
   - Admin Dashboard: `https://d35au6zpsr51nc.cloudfront.net/dashboard.html`
   - Streaming Dashboard: `https://d35au6zpsr51nc.cloudfront.net/streaming.html`
 - **Current MediaLive Channel**: `3714710` (lunora-player-prod-obs-rtmp-channel)
+- **MediaConnect Flow**: `lunora-player-prod-srt-mediaconnect` (deployed and working)
 - **Database Tables**: `lunora-destinations`, `lunora-presets`, `lunora-streaming-sessions`
+- **Service Limits**: 10 MediaLive channels approved (increased from 5)
 
-### **Usage Pattern**: 
+### **Usage Pattern**:
 - **80-100 hours/month** streaming (not 24/7)
 - **Cost-conscious** approach preferred
 - **Granular control** required for individual destination start/stop
+- **Multiple instances** needed (e.g., 2 YouTube feeds for same event)
 
 ## 🏗️ **Target Architecture**
 
 ```
 Videon Edge Node (SRT Caller, Encrypted)
     ↓ SRT Stream (AES-128)
-MediaConnect Flow (SRT Listener → 5 Dedicated RTP-FEC Outputs)
-    ↓ Port 5000-5004
-├── MediaLive Channel 1 (Primary) → MediaPackage → HLS Player
-├── MediaLive Channel 2 (YouTube) → YouTube RTMP
-├── MediaLive Channel 3 (Twitch) → Twitch RTMP
-├── MediaLive Channel 4 (LinkedIn) → LinkedIn RTMP
-└── MediaLive Channel 5 (Custom) → Custom RTMP
+MediaConnect Flow (SRT Listener)
+    ↓ Dynamic API-Driven Output Creation
+├── Primary HLS Channel (Always Running) → MediaPackage → HLS Player
+└── Dynamic MediaLive Channels (On-Demand Creation):
+    ├── YouTube Channel 1 → YouTube RTMP (created when needed)
+    ├── YouTube Channel 2 → YouTube RTMP (created when needed)
+    ├── Twitch Channel → Twitch RTMP (created when needed)
+    ├── LinkedIn Channel → LinkedIn RTMP (created when needed)
+    └── Custom RTMP Channels (created when needed)
 ```
 
 ### **Cost Analysis (100 hours/month):**
 - **MediaConnect Flow**: $115.20/month (24/7 operation)
-- **Data Transfer**: $30.00/month (estimated)
-- **5 MediaLive Channels**: $210.60/month (single pipeline, 100 hours each)
-- **Total**: $355.80/month (vs $280.80 for single channel with no granular control)
-- **Cost Premium**: $75/month for granular control capability
+- **Primary HLS Channel**: $42.12/month (24/7 operation)
+- **Dynamic Channels**: $42.12/month per 100 hours (only when active)
+- **Estimated Total**: $200-300/month (vs $355.80 for always-on channels)
+- **Cost Savings**: 30-50% reduction through on-demand resource usage
 
 ## 📋 **Implementation Requirements**
 
-### **1. Platform-Specific & Generic Presets**
-- **Platform-Specific**: YouTube, Twitch, LinkedIn optimized settings
-- **Generic**: 720p, 1080p universal quality settings
-- **Custom Platform Presets**: Admin-created presets for new platforms
-- **Default Collection**: Ready-to-use presets for all platforms
+### **1. Dynamic Destination Management**
+- **On-Demand Channel Creation**: Create MediaLive channels only when destinations are added
+- **Automatic Cleanup**: Remove MediaLive channels when destinations are deleted
+- **Multi-Instance Support**: Multiple YouTube/Twitch feeds for same event
+- **Real-Time Control**: Start/stop individual destinations without affecting others
 
-### **2. Two-Dashboard Architecture**
-- **Admin Dashboard** (`dashboard.html`): Infrastructure monitoring, platform/preset management (admin-only)
-- **Streaming Dashboard** (`streaming.html`): Live streaming operations, MediaConnect flow status, input health monitoring
+### **2. API-Driven Architecture**
+- **MediaConnect Integration**: Use `add_flow_outputs()` and `remove_flow_output()` APIs
+- **MediaLive Management**: Dynamic channel creation, configuration, and deletion
+- **DynamoDB Tracking**: Store destination metadata and channel associations
+- **RESTful Endpoints**: Clean API design for frontend integration
 
-### **3. Enhanced "Add Destination" Functionality**
-- **Maintain current user-friendly form** for adding destinations
-- **Platform-specific preset selection** with auto-populated settings
-- **Dedicated channel assignment** per destination
-- **Real-time individual status** monitoring
+### **3. Enhanced Frontend Integration**
+- **Maintain Current UI**: Keep existing "Add Destination" form and interface
+- **Real-Time Status**: Show individual destination status and health
+- **Platform Presets**: YouTube, Twitch, LinkedIn, Custom RTMP options
+- **Multi-Instance UI**: Support adding multiple instances of same platform
 
-### **4. Input Health Monitoring**
-- **Main SRT input** status and metrics
-- **Backup SRT input** monitoring (if configured)
-- **Failover capability** with manual switch option
-- **Real-time health indicators** on streaming dashboard
+### **4. Cost Optimization**
+- **Pay-Per-Use**: Only pay for active MediaLive channels
+- **Automatic Scaling**: Scale up/down based on active destinations
+- **Resource Monitoring**: Track usage and costs per destination
+- **Efficient Cleanup**: Immediate resource deallocation when not needed
 
-## 📁 **Key Documents Created**
+## 📁 **Key Documents & References**
 
-### **Comprehensive Implementation Plan:**
-- `docs/srt-mediaconnect-multi-medialive-implementation-v2-robust.md` - Complete robust implementation plan
-- `docs/implementation-review-summary.md` - Review findings and improvements
+### **Comprehensive Architecture Plan:**
+- `docs/DYNAMIC_STREAMING_ARCHITECTURE_PLAN.md` - Complete detailed implementation plan
+- `DEPLOYMENT_LESSONS_LEARNED.md` - Critical deployment insights and safeguards
 
-### **Plan Includes:**
-- ✅ **Complete CloudFormation templates** for MediaConnect flow and 5 MediaLive channels
-- ✅ **Enhanced backend implementation** with multi-channel manager and preset system
-- ✅ **Default preset collection** with platform-specific optimizations
-- ✅ **Dashboard enhancements** for both admin and streaming interfaces
-- ✅ **Deployment scripts** with staged rollout and rollback procedures
-- ✅ **Monitoring and alerting** setup with CloudWatch integration
+### **Architecture Benefits:**
+- ✅ **True Dynamic Scaling**: Create/destroy resources on-demand
+- ✅ **Cost Efficiency**: 30-50% cost reduction through pay-per-use model
+- ✅ **Multi-Instance Support**: Multiple destinations of same platform type
+- ✅ **Robust Deployment**: Based on lessons learned from previous deployments
+- ✅ **Future-Proof Design**: Scalable architecture using AWS APIs
+- ✅ **Granular Control**: Individual destination management without interference
 
 ## 🚀 **Implementation Steps**
 
-### **Phase 1: Infrastructure (Week 1)**
-1. **Create new Git branch**: `feature/srt-mediaconnect-multi-medialive-robust`
-2. **Deploy MediaConnect flow** with SRT input and 5 RTP-FEC outputs
-3. **Deploy 5 MediaLive channels** with dedicated inputs from MediaConnect
-4. **Test SRT → MediaConnect → MediaLive** connectivity
+### **Phase 1: Foundation Infrastructure (Week 1)**
+1. **Create new Git branch**: `feature/dynamic-streaming-foundation`
+2. **Deploy CloudFormation foundation**: Core infrastructure (DynamoDB, Lambda, API Gateway, IAM)
+3. **Implement Lambda functions**: `addDestination`, `removeDestination`, `listDestinations`, `controlDestination`
+4. **Test MediaConnect API integration**: Verify `add_flow_outputs` and `remove_flow_output` functionality
 
-### **Phase 2: Backend (Week 2)**
-1. **Implement multi-channel manager** with robust error handling
-2. **Deploy preset management system** with default presets
-3. **Update Lambda function** with new APIs and environment variables
-4. **Run database migration** for multi-channel schema
+### **Phase 2: Dynamic Channel Management (Week 2)**
+1. **Implement MediaLive channel templates**: Platform-specific presets and configurations
+2. **Build destination lifecycle management**: Create → Configure → Start → Stop → Delete workflows
+3. **Integrate DynamoDB tracking**: Store destination metadata and channel associations
+4. **Test end-to-end destination management**: Add/remove destinations via API
 
-### **Phase 3: Frontend (Week 3)**
-1. **Enhance admin dashboard** with MediaConnect monitoring and platform/preset management
-2. **Update streaming dashboard** with flow status and input health monitoring
-3. **Enhance destination management** with platform-specific presets
-4. **Test end-to-end functionality**
+### **Phase 3: Frontend Integration (Week 3)**
+1. **Update API endpoints**: Integrate new dynamic destination management APIs
+2. **Enhance destination UI**: Support for multiple instances and real-time status
+3. **Implement monitoring dashboard**: Show MediaConnect flow status and destination health
+4. **Test complete user workflows**: Add destinations, start/stop streaming, remove destinations
 
-### **Phase 4: Deployment (Week 4)**
-1. **Configure Videon Edge** for SRT output to MediaConnect
-2. **Production testing** with all destinations
-3. **Monitor and optimize** based on real usage
-4. **Documentation and training**
+### **Phase 4: Production Deployment (Week 4)**
+1. **Deploy to production environment**: Following deployment lessons learned
+2. **Configure monitoring and alerting**: CloudWatch metrics and cost tracking
+3. **Validate cost efficiency**: Monitor actual usage vs projected costs
+4. **Documentation and handover**: Complete implementation documentation
 
 ## 🔧 **Technical Specifications**
 
-### **MediaConnect Flow:**
+### **MediaConnect Flow (Existing):**
 - **Protocol**: SRT listener on port 9998
 - **Encryption**: AES-128 for security
-- **Outputs**: 5 dedicated RTP-FEC outputs (ports 5000-5004)
+- **Dynamic Outputs**: Created/destroyed via `add_flow_outputs()` and `remove_flow_output()` APIs
 - **Monitoring**: CloudWatch alarms and health checks
 
-### **MediaLive Channels:**
-- **Configuration**: Single pipeline for cost efficiency
-- **Input**: MediaConnect RTP-FEC (dedicated per channel)
-- **Encoding**: Platform-optimized presets
-- **Monitoring**: Individual channel health and metrics
+### **Dynamic MediaLive Channels:**
+- **Creation**: On-demand via `CreateChannel` API when destinations added
+- **Configuration**: Platform-specific presets (YouTube, Twitch, LinkedIn, Custom)
+- **Input**: MediaConnect RTP-FEC output (dynamically assigned)
+- **Lifecycle**: Create → Start → Stop → Delete based on destination management
+- **Monitoring**: Individual channel health and cost tracking
 
-### **Backend APIs:**
+### **API Architecture:**
 ```
-GET  /api/channels/status                    - Multi-channel status
-POST /api/destinations/{id}/start-channel    - Start individual channel
-POST /api/destinations/{id}/stop-channel     - Stop individual channel
-GET  /api/mediaconnect/flow/status           - MediaConnect flow status
-GET  /api/mediaconnect/inputs/health         - Input health monitoring
-GET  /api/admin/platforms                    - Platform management (admin)
-GET  /api/admin/presets                      - Preset management (admin)
+POST /api/destinations                       - Add new destination (creates MediaLive channel)
+DELETE /api/destinations/{id}                - Remove destination (deletes MediaLive channel)
+GET /api/destinations                        - List all destinations with status
+POST /api/destinations/{id}/start            - Start specific destination
+POST /api/destinations/{id}/stop             - Stop specific destination
+PUT /api/destinations/{id}                   - Update destination settings
+GET /api/mediaconnect/flow/status            - MediaConnect flow status
+GET /api/destinations/{id}/metrics           - Individual destination metrics
+```
+
+### **DynamoDB Schema:**
+```json
+{
+  "destinationId": "uuid-v4",
+  "name": "YouTube Main Event",
+  "platform": "youtube|twitch|linkedin|custom",
+  "rtmpUrl": "rtmp://a.rtmp.youtube.com/live2",
+  "streamKey": "encrypted-stream-key",
+  "preset": "1080p30|720p30|1080p60|custom",
+  "status": "idle|creating|starting|running|stopping|deleting|error",
+  "mediaLiveChannelId": "1234567",
+  "mediaConnectOutputArn": "arn:aws:mediaconnect:...",
+  "createdAt": "2025-01-XX",
+  "lastModified": "2025-01-XX"
+}
 ```
 
 ## 🎯 **Success Criteria**
 
 ### **Functional Requirements:**
+- ✅ **Dynamic Destination Management**: Add/remove destinations on-demand with automatic resource creation/cleanup
+- ✅ **Multi-Instance Support**: Multiple YouTube/Twitch feeds for same event
+- ✅ **Cost Efficiency**: 30-50% cost reduction through pay-per-use model
 - ✅ **Granular Control**: Start/stop individual destinations independently
-- ✅ **Single SRT Input**: Videon sends one SRT stream to MediaConnect
-- ✅ **HLS Unchanged**: Existing HLS streaming continues working
-- ✅ **Cost Effective**: Total cost under $400/month for 100 hours usage
-- ✅ **Real-time Control**: Add/remove destinations without affecting others
+- ✅ **Real-time Status**: Live monitoring of destination health and performance
+- ✅ **Platform Flexibility**: Support for YouTube, Twitch, LinkedIn, and custom RTMP destinations
 
 ### **Technical Requirements:**
-- ✅ **API Compatibility**: Existing endpoints continue working
-- ✅ **Database Integrity**: No data loss during implementation
-- ✅ **Performance**: No degradation in streaming quality
-- ✅ **Monitoring**: Real-time status for all channels and flow
-- ✅ **Error Handling**: Robust error handling for channel failures
+- ✅ **API-Driven Architecture**: Clean RESTful APIs for all destination operations
+- ✅ **Robust Error Handling**: Comprehensive error handling and recovery mechanisms
+- ✅ **Resource Cleanup**: Automatic cleanup of MediaLive channels and MediaConnect outputs
+- ✅ **Database Consistency**: Reliable tracking of destination state and metadata
+- ✅ **Performance**: Sub-30-second destination creation, sub-10-second deletion
+- ✅ **Monitoring**: Real-time CloudWatch metrics and alerting
 
-## 🚨 **Critical Notes**
+## 🚨 **Critical Implementation Notes**
+
+### **Deployment Lessons Learned Integration:**
+- **Complete Backup Strategy**: Backup all working code before deployment (per DEPLOYMENT_LESSONS_LEARNED.md)
+- **Environment Separation**: Clear dev vs prod configurations to avoid confusion
+- **Incremental Testing**: Test each component individually before integration
+- **Permission Validation**: Verify all AWS permissions upfront (MediaConnect + MediaLive + DynamoDB)
+- **Function URL Management**: Proper resource-based policies for Lambda Function URLs
 
 ### **Rollback Strategy:**
-- **Emergency rollback**: Switch Videon back to current MediaLive channel input
-- **Database backup**: Created before migration
-- **Lambda backup**: Previous function version preserved
-- **Infrastructure**: Keep new resources but revert to old configuration
+- **Infrastructure Rollback**: CloudFormation stack rollback capability
+- **Lambda Versioning**: Previous function versions maintained for quick rollback
+- **Database Backup**: DynamoDB point-in-time recovery enabled
+- **Configuration Backup**: Previous API endpoints and configurations preserved
 
 ### **Security Considerations:**
-- **SRT encryption**: AES-128 for secure transport
-- **IAM least privilege**: Minimal required permissions
-- **Network security**: Restrict MediaConnect access to Videon IP
-- **Credential management**: Encrypted stream keys in database
+- **SRT Encryption**: AES-128 for secure transport from Videon Edge
+- **IAM Least Privilege**: Minimal required permissions for MediaConnect and MediaLive APIs
+- **API Security**: API Gateway authentication and rate limiting
+- **Stream Key Protection**: Encrypted storage of RTMP stream keys in DynamoDB
+
+### **Cost Controls:**
+- **Automatic Cleanup**: Immediate resource deallocation when destinations removed
+- **Usage Monitoring**: CloudWatch cost tracking and alerting
+- **Resource Tagging**: Proper tagging for cost allocation and management
 
 ## 📞 **Request for Implementation**
 
-Please help me implement this robust SRT → MediaConnect → Multi-MediaLive architecture following the comprehensive plan in `docs/srt-mediaconnect-multi-medialive-implementation-v2-robust.md`. 
+Please help me implement this **Dynamic Multi-Destination Streaming Architecture** following the comprehensive plan in `docs/DYNAMIC_STREAMING_ARCHITECTURE_PLAN.md`.
 
-**Start with:**
-1. Creating the new Git branch
-2. Implementing the CloudFormation templates for MediaConnect flow and multi-MediaLive channels
-3. Setting up the enhanced backend with multi-channel management and preset system
+**Implementation Priority:**
+1. **Foundation CloudFormation Template**: Core infrastructure (DynamoDB, Lambda, API Gateway, IAM roles)
+2. **Lambda Functions**: Dynamic destination management using MediaConnect and MediaLive APIs
+3. **API Integration**: RESTful endpoints for destination lifecycle management
+4. **Frontend Integration**: Update existing UI to use new dynamic APIs
+5. **Production Deployment**: Following deployment lessons learned for robust rollout
 
-The goal is to achieve true granular control for RTMP destinations while maintaining cost efficiency and providing enhanced dashboard functionality for both administrators and streaming operators.
+**Key Goals:**
+- ✅ **True Dynamic Control**: Create/destroy MediaLive channels on-demand
+- ✅ **Cost Efficiency**: 30-50% cost reduction through pay-per-use model
+- ✅ **Multi-Instance Support**: Multiple destinations of same platform type
+- ✅ **Robust Deployment**: Based on lessons learned from previous deployments
+- ✅ **Future-Proof Architecture**: Scalable design using AWS APIs
+
+**Start with Phase 1**: Foundation infrastructure deployment, ensuring all components are properly configured and tested before proceeding to dynamic channel management implementation.
+
+## 🚀 **IMPLEMENTATION STATUS - STARTED**
+
+**Current State Analysis Completed:**
+- ✅ MediaConnect Flow: `lunora-player-prod-srt-router` (STANDBY, SRT listener port 9998)
+- ✅ Lambda Function: `lunora-player-prod-multi-destination-api` (Node.js 22.x, working)
+- ✅ DynamoDB Tables: All required tables exist and operational
+- ✅ MediaLive Channel: Channel ID `3714710` configured
+
+**Next Steps:**
+1. Create new Git branch: `feature/dynamic-streaming-foundation`
+2. Implement MediaConnect dynamic output management in Lambda
+3. Add dynamic MediaLive channel creation/deletion APIs
+4. Test complete dynamic destination workflow
