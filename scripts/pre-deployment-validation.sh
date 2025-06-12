@@ -41,23 +41,13 @@ fi
 # 2. Validate CloudFormation templates
 echo "📋 Validating CloudFormation templates..."
 
-# Validate MediaConnect template
+# Validate Dynamic Streaming Foundation template
 if aws cloudformation validate-template \
-    --template-body file://aws/cloudformation/srt-mediaconnect-flow-robust.yaml \
+    --template-body file://aws/cloudformation/dynamic-streaming-foundation.yaml \
     --profile $PROFILE > /dev/null 2>&1; then
-    print_status "MediaConnect flow template is valid"
+    print_status "Dynamic Streaming Foundation template is valid"
 else
-    print_error "MediaConnect flow template validation failed"
-    exit 1
-fi
-
-# Validate MediaLive channels template
-if aws cloudformation validate-template \
-    --template-body file://aws/cloudformation/multi-medialive-channels-complete.yaml \
-    --profile $PROFILE > /dev/null 2>&1; then
-    print_status "Multi-MediaLive channels template is valid"
-else
-    print_error "Multi-MediaLive channels template validation failed"
+    print_error "Dynamic Streaming Foundation template validation failed"
     exit 1
 fi
 
@@ -66,14 +56,15 @@ echo "🌐 Checking existing MediaConnect flow..."
 EXISTING_FLOW=$(aws mediaconnect list-flows \
     --region $REGION \
     --profile $PROFILE \
-    --query 'Flows[?Name==`lunora-player-prod-rtmp-router`].FlowArn' \
+    --query 'Flows[?Name==`lunora-player-prod-srt-router`].FlowArn' \
     --output text 2>/dev/null || echo "")
 
 if [ ! -z "$EXISTING_FLOW" ]; then
-    print_warning "Existing MediaConnect flow found: $EXISTING_FLOW"
-    echo "This will be replaced during deployment."
+    print_status "MediaConnect flow found: $EXISTING_FLOW"
+    echo "This flow will be used for dynamic streaming."
 else
-    print_status "No conflicting MediaConnect flow found"
+    print_error "Required MediaConnect flow not found"
+    exit 1
 fi
 
 # 4. Validate current MediaLive channel
@@ -128,7 +119,7 @@ fi
 # 6. Validate Lambda function
 echo "⚡ Validating Lambda function..."
 LAMBDA_STATE=$(aws lambda get-function \
-    --function-name lunora-player-prod-multi-destination-api \
+    --function-name lunora-player-prod-dynamic-streaming-api \
     --region $REGION \
     --profile $PROFILE \
     --query 'Configuration.State' \
@@ -137,8 +128,8 @@ LAMBDA_STATE=$(aws lambda get-function \
 if [ "$LAMBDA_STATE" = "Active" ]; then
     print_status "Lambda function is active"
 else
-    print_error "Lambda function not found or not active: $LAMBDA_STATE"
-    exit 1
+    print_warning "Lambda function not found or not active: $LAMBDA_STATE"
+    echo "Will be created during deployment"
 fi
 
 # 7. Check available capacity and limits
