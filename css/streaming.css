@@ -122,6 +122,56 @@ body {
     gap: 8px;
 }
 
+/* MediaConnect Flow Section */
+.mediaconnect-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.mediaconnect-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mediaconnect-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.flow-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.flow-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #dc3545;
+    animation: pulse 2s infinite;
+}
+
+.flow-status[data-state="active"] .flow-indicator {
+    background: #28a745;
+}
+
+.flow-status[data-state="starting"] .flow-indicator {
+    background: #ffc107;
+}
+
+.flow-status[data-state="stopping"] .flow-indicator {
+    background: #fd7e14;
+}
+
+.flow-status[data-state="standby"] .flow-indicator {
+    background: #6c757d;
+}
+
 .status-label {
     color: #6c757d;
     font-weight: 500;
@@ -232,6 +282,34 @@ body {
     flex-wrap: wrap;
 }
 
+.btn-small {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 60px;
+    justify-content: center;
+}
+
+.btn-small:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-small:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
 .btn-large {
     padding: 16px 32px;
     font-size: 1.1rem;
@@ -254,6 +332,52 @@ body {
     cursor: not-allowed;
     transform: none;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Button Color Classes */
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #218838;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+}
+
+.btn-warning {
+    background: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background: #e0a800;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #0056b3;
 }
 
 /* ============================================================================

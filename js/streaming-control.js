@@ -1,7 +1,7 @@
 // Lunora Streaming Control - Dedicated Streaming Page Controller
 class StreamingController {
     constructor() {
-        this.apiBaseUrl = 'https://hi2pfpdbrlcry5w73wt27xrniu0vhykl.lambda-url.us-west-2.on.aws/api';
+        this.apiBaseUrl = 'https://rdmgtdz2eu4pj43igkvh6fvaly0xovke.lambda-url.us-west-2.on.aws/api';
         this.refreshInterval = null;
         this.sessionStartTime = null;
         this.stats = {
@@ -54,6 +54,18 @@ class StreamingController {
         const endSessionBtn = document.getElementById('end-session-btn');
         if (endSessionBtn) {
             endSessionBtn.addEventListener('click', () => this.endSession());
+        }
+
+        // MediaConnect Flow controls
+        const mediaConnectStartBtn = document.getElementById('mediaconnect-start-btn');
+        const mediaConnectStopBtn = document.getElementById('mediaconnect-stop-btn');
+
+        if (mediaConnectStartBtn) {
+            mediaConnectStartBtn.addEventListener('click', () => this.startMediaConnectFlow());
+        }
+
+        if (mediaConnectStopBtn) {
+            mediaConnectStopBtn.addEventListener('click', () => this.stopMediaConnectFlow());
         }
     }
 
@@ -127,7 +139,10 @@ class StreamingController {
 
             // Update session time
             this.updateSessionTime();
-            
+
+            // Update MediaConnect Flow status
+            await this.updateMediaConnectStatus();
+
         } catch (error) {
             console.error('Error updating quick status:', error);
         }
@@ -162,8 +177,148 @@ class StreamingController {
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = totalSeconds % 60;
-        
+
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    // ============================================================================
+    // MEDIACONNECT FLOW MANAGEMENT
+    // ============================================================================
+
+    async updateMediaConnectStatus() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/flow/status`);
+            const data = await response.json();
+
+            const statusElement = document.getElementById('mediaconnect-status');
+            const flowIndicator = statusElement?.querySelector('.flow-indicator');
+            const flowText = statusElement?.querySelector('.flow-text');
+            const startBtn = document.getElementById('mediaconnect-start-btn');
+            const stopBtn = document.getElementById('mediaconnect-stop-btn');
+
+            if (data.status === 'success' && data.flow) {
+                const flowState = data.flow.status || 'error';
+                const stateText = this.getFlowStateText(flowState);
+
+                // Update status display
+                if (statusElement) {
+                    statusElement.setAttribute('data-state', flowState.toLowerCase());
+                }
+                if (flowText) {
+                    flowText.textContent = stateText;
+                }
+
+                // Update button states
+                if (startBtn && stopBtn) {
+                    if (flowState === 'ACTIVE') {
+                        startBtn.disabled = true;
+                        stopBtn.disabled = false;
+                    } else if (flowState === 'STANDBY') {
+                        startBtn.disabled = false;
+                        stopBtn.disabled = true;
+                    } else {
+                        startBtn.disabled = false;
+                        stopBtn.disabled = false;
+                    }
+                }
+            } else {
+                // Error state
+                if (statusElement) {
+                    statusElement.setAttribute('data-state', 'error');
+                }
+                if (flowText) {
+                    flowText.textContent = 'Error';
+                }
+                if (startBtn) startBtn.disabled = false;
+                if (stopBtn) stopBtn.disabled = true;
+            }
+        } catch (error) {
+            console.error('Error updating MediaConnect status:', error);
+            // Set error state
+            const statusElement = document.getElementById('mediaconnect-status');
+            const flowText = statusElement?.querySelector('.flow-text');
+            if (statusElement) {
+                statusElement.setAttribute('data-state', 'error');
+            }
+            if (flowText) {
+                flowText.textContent = 'Error';
+            }
+        }
+    }
+
+    getFlowStateText(state) {
+        const stateMap = {
+            'ACTIVE': 'Active',
+            'STANDBY': 'Standby',
+            'STARTING': 'Starting...',
+            'STOPPING': 'Stopping...',
+            'ERROR': 'Error',
+            'UNKNOWN': 'Unknown',
+            'not_configured': 'Not Configured'
+        };
+        return stateMap[state] || state;
+    }
+
+    async startMediaConnectFlow() {
+        try {
+            const startBtn = document.getElementById('mediaconnect-start-btn');
+            if (startBtn) {
+                startBtn.disabled = true;
+                startBtn.textContent = '⏳ Starting...';
+            }
+
+            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/flow/start`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                console.log('MediaConnect flow started successfully');
+                await this.updateMediaConnectStatus();
+            } else {
+                throw new Error(data.message || 'Failed to start MediaConnect flow');
+            }
+        } catch (error) {
+            console.error('Error starting MediaConnect flow:', error);
+            alert('Failed to start MediaConnect flow: ' + error.message);
+        } finally {
+            const startBtn = document.getElementById('mediaconnect-start-btn');
+            if (startBtn) {
+                startBtn.disabled = false;
+                startBtn.textContent = '▶ Start';
+            }
+        }
+    }
+
+    async stopMediaConnectFlow() {
+        try {
+            const stopBtn = document.getElementById('mediaconnect-stop-btn');
+            if (stopBtn) {
+                stopBtn.disabled = true;
+                stopBtn.textContent = '⏳ Stopping...';
+            }
+
+            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/flow/stop`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                console.log('MediaConnect flow stopped successfully');
+                await this.updateMediaConnectStatus();
+            } else {
+                throw new Error(data.message || 'Failed to stop MediaConnect flow');
+            }
+        } catch (error) {
+            console.error('Error stopping MediaConnect flow:', error);
+            alert('Failed to stop MediaConnect flow: ' + error.message);
+        } finally {
+            const stopBtn = document.getElementById('mediaconnect-stop-btn');
+            if (stopBtn) {
+                stopBtn.disabled = false;
+                stopBtn.textContent = '⏹ Stop';
+            }
+        }
     }
 
     // ============================================================================
@@ -294,7 +449,7 @@ async function testAllConnections() {
     
     for (const dest of destinations) {
         try {
-            const response = await fetch(`https://hi2pfpdbrlcry5w73wt27xrniu0vhykl.lambda-url.us-west-2.on.aws/api/destinations/${dest.destination_id}/test`, {
+            const response = await fetch(`https://rdmgtdz2eu4pj43igkvh6fvaly0xovke.lambda-url.us-west-2.on.aws/api/destinations/${dest.destination_id}/test`, {
                 method: 'POST'
             });
             const result = await response.json();

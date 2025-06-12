@@ -31,16 +31,26 @@
 
         <!-- Quick Status Bar -->
         <section class="quick-status">
-            <div class="status-item">
-                <span class="status-label">MediaLive Channel:</span>
-                <span id="medialive-status" class="status-value channel-status" data-state="unknown">
-                    <span class="channel-indicator"></span>
-                    <span class="channel-text">Loading...</span>
-                </span>
+            <div class="status-item mediaconnect-section">
+                <div class="mediaconnect-status">
+                    <span class="status-label">MediaConnect Flow:</span>
+                    <span id="mediaconnect-status" class="status-value flow-status" data-state="error">
+                        <span class="flow-indicator"></span>
+                        <span class="flow-text">Error</span>
+                    </span>
+                </div>
+                <div class="mediaconnect-controls">
+                    <button id="mediaconnect-start-btn" class="btn-small btn-success">
+                        ▶ Start
+                    </button>
+                    <button id="mediaconnect-stop-btn" class="btn-small btn-danger">
+                        ⏹ Stop
+                    </button>
+                </div>
             </div>
             <div class="status-item">
                 <span class="status-label">Destinations:</span>
-                <span id="destinations-count" class="status-value">0</span>
+                <span id="destinations-count" class="status-value">1</span>
             </div>
             <div class="status-item">
                 <span class="status-label">Active Streams:</span>

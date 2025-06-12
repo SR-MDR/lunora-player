@@ -142,7 +142,7 @@ class RobustMultiChannelManager {
             const result = await mediaconnect.describeFlow(params).promise();
 
             return {
-                status: 'active',
+                status: result.Flow.Status || 'UNKNOWN',
                 flowArn: result.Flow.FlowArn,
                 flowName: result.Flow.Name,
                 sourceStatus: result.Flow.Source?.IngestIp ? 'ready' : 'pending',
@@ -158,6 +158,46 @@ class RobustMultiChannelManager {
                 status: 'error',
                 message: error.message
             };
+        }
+    }
+
+    async startMediaConnectFlow() {
+        try {
+            if (!this.mediaConnectFlowArn) {
+                throw new Error('MediaConnect flow ARN not configured');
+            }
+
+            const params = { FlowArn: this.mediaConnectFlowArn };
+            await mediaconnect.startFlow(params).promise();
+
+            return {
+                status: 'success',
+                message: 'MediaConnect flow start initiated',
+                flowArn: this.mediaConnectFlowArn
+            };
+        } catch (error) {
+            console.error('Error starting MediaConnect flow:', error);
+            throw error;
+        }
+    }
+
+    async stopMediaConnectFlow() {
+        try {
+            if (!this.mediaConnectFlowArn) {
+                throw new Error('MediaConnect flow ARN not configured');
+            }
+
+            const params = { FlowArn: this.mediaConnectFlowArn };
+            await mediaconnect.stopFlow(params).promise();
+
+            return {
+                status: 'success',
+                message: 'MediaConnect flow stop initiated',
+                flowArn: this.mediaConnectFlowArn
+            };
+        } catch (error) {
+            console.error('Error stopping MediaConnect flow:', error);
+            throw error;
         }
     }
 

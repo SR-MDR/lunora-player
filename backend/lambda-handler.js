@@ -1086,6 +1086,34 @@ const getInputHealthMonitoring = async () => {
     }
 };
 
+const startMediaConnectFlow = async () => {
+    try {
+        const result = await multiChannelManager.startMediaConnectFlow();
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            message: result.message,
+            flow_arn: result.flowArn
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to start MediaConnect flow');
+    }
+};
+
+const stopMediaConnectFlow = async () => {
+    try {
+        const result = await multiChannelManager.stopMediaConnectFlow();
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            message: result.message,
+            flow_arn: result.flowArn
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to stop MediaConnect flow');
+    }
+};
+
 const validateChannelConfiguration = async () => {
     try {
         const result = await multiChannelManager.validateChannelConfiguration();
@@ -1275,6 +1303,14 @@ exports.handler = async (event) => {
 
         if (path === '/api/mediaconnect/flow/status' && httpMethod === 'GET') {
             return await getMediaConnectFlowStatus();
+        }
+
+        if (path === '/api/mediaconnect/flow/start' && httpMethod === 'POST') {
+            return await startMediaConnectFlow();
+        }
+
+        if (path === '/api/mediaconnect/flow/stop' && httpMethod === 'POST') {
+            return await stopMediaConnectFlow();
         }
 
         if (path === '/api/mediaconnect/inputs/health' && httpMethod === 'GET') {
