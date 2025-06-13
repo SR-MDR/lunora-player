@@ -31,6 +31,7 @@
 
         <!-- Quick Status Bar -->
         <section class="quick-status">
+            <!-- MediaConnect Flow Section -->
             <div class="status-item mediaconnect-section">
                 <div class="mediaconnect-status">
                     <span class="status-label">MediaConnect Flow:</span>
@@ -48,6 +49,46 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Source Health Section -->
+            <div class="status-item source-health-section" id="source-health-section" style="display: none;">
+                <div class="source-health-header">
+                    <span class="status-label">📡 Source Health:</span>
+                </div>
+                <div class="sources-container">
+                    <!-- Primary Source -->
+                    <div class="source-item" id="primary-source">
+                        <div class="source-status">
+                            <span class="source-indicator" id="primary-source-indicator">🔴</span>
+                            <span class="source-name" id="primary-source-name">Source 1</span>
+                        </div>
+                        <div class="source-metrics">
+                            <span class="source-bandwidth" id="primary-source-bandwidth">0 Mbps</span>
+                            <span class="source-protocol" id="primary-source-protocol">SRT</span>
+                        </div>
+                    </div>
+
+                    <!-- Secondary Source (for failover) -->
+                    <div class="source-item" id="secondary-source" style="display: none;">
+                        <div class="source-status">
+                            <span class="source-indicator" id="secondary-source-indicator">🔴</span>
+                            <span class="source-name" id="secondary-source-name">Source 2</span>
+                        </div>
+                        <div class="source-metrics">
+                            <span class="source-bandwidth" id="secondary-source-bandwidth">0 Mbps</span>
+                            <span class="source-protocol" id="secondary-source-protocol">SRT</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Failover Status -->
+                <div class="failover-status" id="failover-status">
+                    <span class="failover-label">🔄 Failover:</span>
+                    <span class="failover-state" id="failover-state">Disabled</span>
+                </div>
+            </div>
+
+            <!-- Other Status Items -->
             <div class="status-item">
                 <span class="status-label">Destinations:</span>
                 <span id="destinations-count" class="status-value">1</span>

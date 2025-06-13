@@ -185,6 +185,111 @@ body {
 }
 
 /* ============================================================================
+   SOURCE HEALTH SECTION
+   ============================================================================ */
+
+.source-health-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 280px;
+}
+
+.source-health-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.sources-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+.source-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background: rgba(248, 249, 250, 0.8);
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+    min-height: 36px;
+}
+
+.source-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.source-indicator {
+    font-size: 0.8rem;
+    width: 12px;
+    text-align: center;
+}
+
+.source-name {
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: #495057;
+    min-width: 60px;
+}
+
+.source-metrics {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.source-bandwidth {
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: #28a745;
+}
+
+.source-protocol {
+    font-size: 0.7rem;
+    color: #6c757d;
+    text-transform: uppercase;
+}
+
+.failover-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
+.failover-label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.failover-state {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+.failover-state.enabled {
+    color: #28a745;
+}
+
+.failover-state.disabled {
+    color: #6c757d;
+}
+
+/* ============================================================================
    MAIN CONTENT
    ============================================================================ */
 
@@ -565,36 +670,57 @@ body {
         gap: 16px;
         text-align: center;
     }
-    
+
     .quick-status {
         grid-template-columns: repeat(2, 1fr);
         gap: 16px;
     }
-    
+
+    .source-health-section {
+        grid-column: 1 / -1;
+        min-width: unset;
+    }
+
+    .sources-container {
+        flex-direction: row;
+        gap: 8px;
+    }
+
+    .source-item {
+        flex: 1;
+        flex-direction: column;
+        gap: 4px;
+        text-align: center;
+    }
+
+    .source-metrics {
+        align-items: center;
+    }
+
     .controls-buttons {
         flex-direction: column;
         align-items: center;
     }
-    
+
     .btn-large {
         width: 100%;
         max-width: 300px;
     }
-    
+
     .live-header {
         flex-direction: column;
         gap: 16px;
         text-align: center;
     }
-    
+
     .session-stats {
         grid-template-columns: 1fr;
     }
-    
+
     .actions-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .footer-content {
         flex-direction: column;
         gap: 12px;
@@ -606,19 +732,235 @@ body {
     .streaming-main {
         padding: 20px 16px;
     }
-    
+
     .multi-destination-streaming,
     .quick-actions {
         padding: 20px;
     }
-    
+
     .destinations-header {
         flex-direction: column;
         gap: 16px;
         text-align: center;
     }
-    
+
     .quick-status {
         grid-template-columns: 1fr;
     }
+
+    .source-health-section {
+        grid-column: 1;
+    }
+
+    .sources-container {
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .source-item {
+        flex-direction: row;
+        justify-content: space-between;
+    }
+
+    .source-metrics {
+        align-items: flex-end;
+    }
+
+    .mediaconnect-controls {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .btn-small {
+        width: 100%;
+        min-width: unset;
+    }
+}
+
+/* ============================================================================
+   SOURCE HEALTH SECTION
+   ============================================================================ */
+
+.source-health-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+}
+
+.source-health-header h4 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    color: #e0e0e0;
+    font-weight: 500;
+}
+
+.sources-list {
+    margin-bottom: 8px;
+}
+
+.source-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 6px;
+    border-left: 3px solid #4CAF50;
+}
+
+.source-item:last-child {
+    margin-bottom: 0;
+}
+
+.source-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.source-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: #e0e0e0;
+}
+
+.source-protocol {
+    font-size: 10px;
+    color: #999;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.source-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: #bbb;
+}
+
+.source-endpoint {
+    font-family: 'Courier New', monospace;
+}
+
+.source-bandwidth {
+    font-weight: 500;
+    color: #4CAF50;
+}
+
+.failover-status {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 8px;
+}
+
+.failover-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+}
+
+.failover-label {
+    color: #e0e0e0;
+    font-weight: 500;
+}
+
+.failover-state {
+    color: #4CAF50;
+    font-weight: 500;
+}
+
+/* ============================================================================
+   SOURCE HEALTH SECTION
+   ============================================================================ */
+
+.source-health-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+}
+
+.source-health-header h4 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    color: #e0e0e0;
+    font-weight: 500;
+}
+
+.sources-list {
+    margin-bottom: 8px;
+}
+
+.source-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 6px;
+    border-left: 3px solid #4CAF50;
+}
+
+.source-item:last-child {
+    margin-bottom: 0;
+}
+
+.source-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.source-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: #e0e0e0;
+}
+
+.source-protocol {
+    font-size: 10px;
+    color: #999;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.source-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: #bbb;
+}
+
+.source-endpoint {
+    font-family: 'Courier New', monospace;
+}
+
+.source-bandwidth {
+    font-weight: 500;
+    color: #4CAF50;
+}
+
+.failover-status {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 8px;
+}
+
+.failover-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+}
+
+.failover-label {
+    color: #e0e0e0;
+    font-weight: 500;
+}
+
+.failover-state {
+    color: #4CAF50;
+    font-weight: 500;
 }
