@@ -101,16 +101,13 @@ body {
    ============================================================================ */
 
 .quick-status {
-    background: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
-    padding: 16px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.quick-status {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 16px 24px;
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 32px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 24px;

@@ -29,86 +29,85 @@
             </div>
         </header>
 
-        <!-- Quick Status Bar -->
-        <section class="quick-status">
-            <!-- MediaConnect Flow Section -->
-            <div class="status-item mediaconnect-section">
-                <div class="mediaconnect-status">
-                    <span class="status-label">MediaConnect Flow:</span>
-                    <span id="mediaconnect-status" class="status-value flow-status" data-state="error">
-                        <span class="flow-indicator"></span>
-                        <span class="flow-text">Error</span>
-                    </span>
-                </div>
-                <div class="mediaconnect-controls">
-                    <button id="mediaconnect-start-btn" class="btn-small btn-success">
-                        ▶ Start
-                    </button>
-                    <button id="mediaconnect-stop-btn" class="btn-small btn-danger">
-                        ⏹ Stop
-                    </button>
-                </div>
-            </div>
-
-            <!-- Source Health Section -->
-            <div class="status-item source-health-section" id="source-health-section" style="display: none;">
-                <div class="source-health-header">
-                    <span class="status-label">📡 Source Health:</span>
-                </div>
-                <div class="sources-container">
-                    <!-- Primary Source -->
-                    <div class="source-item" id="primary-source">
-                        <div class="source-status">
-                            <span class="source-indicator" id="primary-source-indicator">🔴</span>
-                            <span class="source-name" id="primary-source-name">Source 1</span>
-                        </div>
-                        <div class="source-metrics">
-                            <span class="source-bandwidth" id="primary-source-bandwidth">0 Mbps</span>
-                            <span class="source-protocol" id="primary-source-protocol">SRT</span>
-                        </div>
-                    </div>
-
-                    <!-- Secondary Source (for failover) -->
-                    <div class="source-item" id="secondary-source" style="display: none;">
-                        <div class="source-status">
-                            <span class="source-indicator" id="secondary-source-indicator">🔴</span>
-                            <span class="source-name" id="secondary-source-name">Source 2</span>
-                        </div>
-                        <div class="source-metrics">
-                            <span class="source-bandwidth" id="secondary-source-bandwidth">0 Mbps</span>
-                            <span class="source-protocol" id="secondary-source-protocol">SRT</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Failover Status -->
-                <div class="failover-status" id="failover-status">
-                    <span class="failover-label">🔄 Failover:</span>
-                    <span class="failover-state" id="failover-state">Disabled</span>
-                </div>
-            </div>
-
-            <!-- Other Status Items -->
-            <div class="status-item">
-                <span class="status-label">Destinations:</span>
-                <span id="destinations-count" class="status-value">1</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Active Streams:</span>
-                <span id="active-streams-count" class="status-value">0</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Total Bandwidth:</span>
-                <span id="total-bandwidth" class="status-value">0 Mbps</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Session Time:</span>
-                <span id="session-time" class="status-value">00:00:00</span>
-            </div>
-        </section>
-
         <!-- Main Content -->
         <main class="streaming-main">
+            <!-- Quick Status Bar -->
+            <section class="quick-status">
+                <!-- MediaConnect Flow Section -->
+                <div class="status-item mediaconnect-section">
+                    <div class="mediaconnect-status">
+                        <span class="status-label">MediaConnect Flow:</span>
+                        <span id="mediaconnect-status" class="status-value flow-status" data-state="error">
+                            <span class="flow-indicator"></span>
+                            <span class="flow-text">Error</span>
+                        </span>
+                    </div>
+                    <div class="mediaconnect-controls">
+                        <button id="mediaconnect-start-btn" class="btn-small btn-success">
+                            ▶ Start
+                        </button>
+                        <button id="mediaconnect-stop-btn" class="btn-small btn-danger">
+                            ⏹ Stop
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Source Health Section -->
+                <div class="status-item source-health-section" id="source-health-section" style="display: none;">
+                    <div class="source-health-header">
+                        <span class="status-label">📡 Source Health:</span>
+                    </div>
+                    <div class="sources-container">
+                        <!-- Primary Source -->
+                        <div class="source-item" id="primary-source">
+                            <div class="source-status">
+                                <span class="source-indicator" id="primary-source-indicator">🔴</span>
+                                <span class="source-name" id="primary-source-name">Source 1</span>
+                            </div>
+                            <div class="source-metrics">
+                                <span class="source-bandwidth" id="primary-source-bandwidth">0 Mbps</span>
+                                <span class="source-protocol" id="primary-source-protocol">SRT</span>
+                            </div>
+                        </div>
+
+                        <!-- Secondary Source (for failover) -->
+                        <div class="source-item" id="secondary-source" style="display: none;">
+                            <div class="source-status">
+                                <span class="source-indicator" id="secondary-source-indicator">🔴</span>
+                                <span class="source-name" id="secondary-source-name">Source 2</span>
+                            </div>
+                            <div class="source-metrics">
+                                <span class="source-bandwidth" id="secondary-source-bandwidth">0 Mbps</span>
+                                <span class="source-protocol" id="secondary-source-protocol">SRT</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Failover Status -->
+                    <div class="failover-status" id="failover-status">
+                        <span class="failover-label">🔄 Failover:</span>
+                        <span class="failover-state" id="failover-state">Disabled</span>
+                    </div>
+                </div>
+
+                <!-- Other Status Items -->
+                <div class="status-item">
+                    <span class="status-label">Destinations:</span>
+                    <span id="destinations-count" class="status-value">1</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Active Streams:</span>
+                    <span id="active-streams-count" class="status-value">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Total Bandwidth:</span>
+                    <span id="total-bandwidth" class="status-value">0 Mbps</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Session Time:</span>
+                    <span id="session-time" class="status-value">00:00:00</span>
+                </div>
+            </section>
             <!-- Multi-Destination Streaming Section -->
             <section class="multi-destination-streaming">
                 <!-- Destination Management Panel -->
