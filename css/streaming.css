@@ -278,8 +278,8 @@ body {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
-    min-width: 350px; /* Increased minimum width to prevent overlap */
-    grid-column: span 2; /* Take up more space in grid */
+    min-width: 280px; /* Reduced width for more compact display */
+    max-width: 320px; /* Set maximum width to prevent boxes from being too wide */
 }
 
 .source-health-header {
@@ -915,12 +915,15 @@ body {
     display: flex;
     align-items: center;
     gap: 8px; /* Increased gap */
+    flex: 1; /* Take available space */
 }
 
 .source-name {
     font-size: 14px; /* Increased from 11px */
     font-weight: 600; /* Bolder weight */
     color: #000000; /* Black text for better readability */
+    text-align: left; /* Explicitly left-align */
+    flex: 1; /* Take available space */
 }
 
 .source-protocol {
@@ -930,6 +933,8 @@ body {
     padding: 4px 8px; /* Increased padding */
     border-radius: 4px; /* Larger border radius */
     font-weight: 500;
+    text-align: right; /* Right-align protocol labels */
+    margin-left: auto; /* Push to right side */
 }
 
 .source-details {
@@ -947,6 +952,7 @@ body {
     color: #000000; /* Black text */
     font-size: 12px; /* Increased from 10px */
     font-weight: 500;
+    text-align: left; /* Explicitly left-align IP addresses */
     flex: 1; /* Take available space */
     margin-right: 8px; /* Add margin to prevent overlap */
 }
@@ -956,8 +962,9 @@ body {
     align-items: center;
     gap: 8px; /* Increased gap to prevent overlap */
     flex-shrink: 0; /* Prevent shrinking */
-    min-width: 120px; /* Ensure minimum width for status text */
+    min-width: 110px; /* Reduced minimum width for more compact display */
     justify-content: flex-end; /* Align to right side */
+    text-align: right; /* Ensure text is right-aligned */
 }
 
 .source-indicator {
@@ -968,6 +975,7 @@ body {
     font-size: 12px; /* Increased from 10px */
     font-weight: 600; /* Bolder weight */
     color: #000000; /* Black text */
+    text-align: right; /* Right-align status text */
 }
 
 .source-bandwidth {
