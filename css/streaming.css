@@ -145,6 +145,95 @@ body {
     font-weight: 600;
 }
 
+/* Dual Source and Failover Styling */
+.failover-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.failover-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+}
+
+.failover-label {
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.failover-state {
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+.failover-state[data-state="enabled"] {
+    background: #d4edda;
+    color: #155724;
+}
+
+.failover-state[data-state="disabled"] {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.failover-controls {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.source-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    background: #f8f9fa;
+    margin-bottom: 6px;
+}
+
+.source-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.source-indicator {
+    font-size: 0.8rem;
+}
+
+.source-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.source-active-badge {
+    background: #28a745;
+    color: white;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.source-metrics {
+    display: flex;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.source-ip {
+    font-family: monospace;
+}
+
 .flow-indicator {
     width: 8px;
     height: 8px;

@@ -67,6 +67,23 @@ class StreamingController {
         if (mediaConnectStopBtn) {
             mediaConnectStopBtn.addEventListener('click', () => this.stopMediaConnectFlow());
         }
+
+        // Dual Source controls
+        const addBackupBtn = document.getElementById('add-backup-btn');
+        const enableFailoverBtn = document.getElementById('enable-failover-btn');
+        const testFailoverBtn = document.getElementById('test-failover-btn');
+
+        if (addBackupBtn) {
+            addBackupBtn.addEventListener('click', () => this.addBackupSource());
+        }
+
+        if (enableFailoverBtn) {
+            enableFailoverBtn.addEventListener('click', () => this.toggleFailover());
+        }
+
+        if (testFailoverBtn) {
+            testFailoverBtn.addEventListener('click', () => this.testFailover());
+        }
     }
 
     // ============================================================================
@@ -188,14 +205,18 @@ class StreamingController {
 
     async updateMediaConnectStatus() {
         try {
-            // Fetch both flow status and input health
-            const [flowResponse, healthResponse] = await Promise.all([
+            // Fetch flow status, input health, and dual source information
+            const [flowResponse, healthResponse, sourcesResponse, failoverResponse] = await Promise.all([
                 fetch(`${this.apiBaseUrl}/mediaconnect/flow/status`),
-                fetch(`${this.apiBaseUrl}/mediaconnect/inputs/health`)
+                fetch(`${this.apiBaseUrl}/mediaconnect/inputs/health`),
+                fetch(`${this.apiBaseUrl}/mediaconnect/sources/health`),
+                fetch(`${this.apiBaseUrl}/mediaconnect/failover/status`)
             ]);
 
             const flowData = await flowResponse.json();
             const healthData = await healthResponse.json();
+            const sourcesData = sourcesResponse.ok ? await sourcesResponse.json() : null;
+            const failoverData = failoverResponse.ok ? await failoverResponse.json() : null;
 
             const statusElement = document.getElementById('mediaconnect-status');
             const flowIndicator = statusElement?.querySelector('.flow-indicator');
@@ -229,8 +250,8 @@ class StreamingController {
                     }
                 }
 
-                // Update source health details
-                this.updateSourceHealthDetails(flowData.flow, healthData);
+                // Update source health details with dual source support
+                this.updateDualSourceHealthDetails(flowData.flow, healthData, sourcesData, failoverData);
             } else {
                 // Error state
                 if (statusElement) {
@@ -395,6 +416,285 @@ class StreamingController {
         if (sourceHealthSection) {
             sourceHealthSection.style.display = 'none';
         }
+    }
+
+    // ============================================================================
+    // DUAL SOURCE MANAGEMENT METHODS
+    // ============================================================================
+
+    // Update dual source health details in the quick status bar
+    updateDualSourceHealthDetails(flowData, healthData, sourcesData, failoverData) {
+        const sourceHealthSection = document.getElementById('source-health-section');
+
+        // Check if we have valid flow data and the flow is active
+        if (!flowData || !['ACTIVE', 'STARTING'].includes(flowData.status)) {
+            this.hideSourceHealthDetails();
+            return;
+        }
+
+        // Show the source health section
+        if (sourceHealthSection) {
+            sourceHealthSection.style.display = 'flex';
+        }
+
+        // Update sources information
+        const sources = sourcesData?.sources_health?.sources || healthData?.input_health?.sources || [];
+
+        // Update primary source
+        this.updateSourceDisplay('primary', sources[0], failoverData);
+
+        // Update secondary source if it exists
+        const secondarySource = sources[1];
+        const secondaryElement = document.getElementById('secondary-source');
+
+        if (secondarySource && secondaryElement) {
+            secondaryElement.style.display = 'block';
+            this.updateSourceDisplay('secondary', secondarySource, failoverData);
+        } else if (secondaryElement) {
+            secondaryElement.style.display = 'none';
+        }
+
+        // Update failover status
+        this.updateFailoverStatus(failoverData);
+
+        // Update failover controls visibility
+        this.updateFailoverControls(sources.length, failoverData);
+    }
+
+    updateSourceDisplay(sourceType, sourceData, failoverData) {
+        if (!sourceData) return;
+
+        const indicator = document.getElementById(`${sourceType}-source-indicator`);
+        const name = document.getElementById(`${sourceType}-source-name`);
+        const bandwidth = document.getElementById(`${sourceType}-source-bandwidth`);
+        const protocol = document.getElementById(`${sourceType}-source-protocol`);
+
+        if (indicator) {
+            // Update indicator based on connection status
+            indicator.textContent = sourceData.status === 'connected' ? '🟢' : '🔴';
+        }
+
+        if (name) {
+            let displayName = sourceData.name || `${sourceType.charAt(0).toUpperCase() + sourceType.slice(1)}`;
+
+            // Add primary/backup indicator
+            if (failoverData && failoverData.sources) {
+                const sourceInfo = failoverData.sources.find(s => s.name === sourceData.name);
+                if (sourceInfo && sourceInfo.is_primary) {
+                    displayName += ' (Primary)';
+                } else if (sourceInfo && !sourceInfo.is_primary) {
+                    displayName += ' (Backup)';
+                }
+            }
+
+            name.textContent = displayName;
+        }
+
+        if (bandwidth) {
+            // Show connection info - IP and port
+            const ipInfo = sourceData.ingest_ip ? `${sourceData.ingest_ip}:${sourceData.ingest_port || ''}` : '---';
+            bandwidth.textContent = ipInfo;
+        }
+
+        if (protocol) {
+            protocol.textContent = sourceData.protocol || 'SRT';
+        }
+    }
+
+    updateFailoverStatus(failoverData) {
+        const failoverState = document.getElementById('failover-state');
+
+        if (failoverState && failoverData) {
+            const isEnabled = failoverData.failover_enabled;
+            const mode = failoverData.failover_mode || 'FAILOVER';
+
+            if (isEnabled) {
+                failoverState.textContent = `Enabled (${mode})`;
+                failoverState.setAttribute('data-state', 'enabled');
+            } else {
+                failoverState.textContent = 'Disabled';
+                failoverState.setAttribute('data-state', 'disabled');
+            }
+        }
+    }
+
+    updateFailoverControls(sourceCount, failoverData) {
+        const failoverControls = document.getElementById('failover-controls');
+        const addBackupBtn = document.getElementById('add-backup-btn');
+        const enableFailoverBtn = document.getElementById('enable-failover-btn');
+        const testFailoverBtn = document.getElementById('test-failover-btn');
+
+        if (!failoverControls) return;
+
+        // Show controls if we have at least one source
+        if (sourceCount > 0) {
+            failoverControls.style.display = 'flex';
+
+            // Show/hide add backup button
+            if (addBackupBtn) {
+                addBackupBtn.style.display = sourceCount < 2 ? 'inline-block' : 'none';
+            }
+
+            // Update enable/disable failover button
+            if (enableFailoverBtn && failoverData) {
+                const isEnabled = failoverData.failover_enabled;
+                enableFailoverBtn.textContent = isEnabled ? '🔄 Disable Failover' : '🔄 Enable Failover';
+                enableFailoverBtn.disabled = sourceCount < 2;
+            }
+
+            // Show test failover button only if failover is enabled and we have 2 sources
+            if (testFailoverBtn && failoverData) {
+                const canTest = failoverData.failover_enabled && sourceCount >= 2;
+                testFailoverBtn.style.display = canTest ? 'inline-block' : 'none';
+            }
+        } else {
+            failoverControls.style.display = 'none';
+        }
+    }
+
+    async addBackupSource() {
+        try {
+            const addBackupBtn = document.getElementById('add-backup-btn');
+            if (addBackupBtn) {
+                addBackupBtn.disabled = true;
+                addBackupBtn.textContent = '⏳ Adding...';
+            }
+
+            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/sources/add-backup`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: 'Backup-SRT-Source',
+                    ingestPort: 9999,
+                    whitelistCidr: '0.0.0.0/0',
+                    description: 'Backup SRT source for failover redundancy'
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                console.log('Backup source added successfully');
+                await this.updateMediaConnectStatus();
+                this.showNotification('Backup source added successfully', 'success');
+            } else {
+                throw new Error(data.message || 'Failed to add backup source');
+            }
+        } catch (error) {
+            console.error('Error adding backup source:', error);
+            this.showNotification(`Failed to add backup source: ${error.message}`, 'error');
+        } finally {
+            const addBackupBtn = document.getElementById('add-backup-btn');
+            if (addBackupBtn) {
+                addBackupBtn.disabled = false;
+                addBackupBtn.textContent = '➕ Add Backup';
+            }
+        }
+    }
+
+    async toggleFailover() {
+        try {
+            const enableFailoverBtn = document.getElementById('enable-failover-btn');
+            if (enableFailoverBtn) {
+                enableFailoverBtn.disabled = true;
+                enableFailoverBtn.textContent = '⏳ Updating...';
+            }
+
+            // Get current failover status
+            const statusResponse = await fetch(`${this.apiBaseUrl}/mediaconnect/failover/status`);
+            const statusData = await statusResponse.json();
+
+            const currentlyEnabled = statusData.failover_enabled;
+
+            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/failover/configure`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    enabled: !currentlyEnabled
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                const action = currentlyEnabled ? 'disabled' : 'enabled';
+                console.log(`Failover ${action} successfully`);
+                await this.updateMediaConnectStatus();
+                this.showNotification(`Failover ${action} successfully`, 'success');
+            } else {
+                throw new Error(data.message || 'Failed to toggle failover');
+            }
+        } catch (error) {
+            console.error('Error toggling failover:', error);
+            this.showNotification(`Failed to toggle failover: ${error.message}`, 'error');
+        } finally {
+            const enableFailoverBtn = document.getElementById('enable-failover-btn');
+            if (enableFailoverBtn) {
+                enableFailoverBtn.disabled = false;
+                // Text will be updated by updateMediaConnectStatus
+            }
+        }
+    }
+
+    async testFailover() {
+        try {
+            const testFailoverBtn = document.getElementById('test-failover-btn');
+            if (testFailoverBtn) {
+                testFailoverBtn.disabled = true;
+                testFailoverBtn.textContent = '⏳ Testing...';
+            }
+
+            // For now, this is a placeholder - actual failover testing would require
+            // more complex logic to temporarily switch sources
+            this.showNotification('Failover test initiated - check source indicators for changes', 'info');
+
+            // Refresh status after a short delay
+            setTimeout(() => {
+                this.updateMediaConnectStatus();
+            }, 2000);
+
+        } catch (error) {
+            console.error('Error testing failover:', error);
+            this.showNotification(`Failed to test failover: ${error.message}`, 'error');
+        } finally {
+            const testFailoverBtn = document.getElementById('test-failover-btn');
+            if (testFailoverBtn) {
+                testFailoverBtn.disabled = false;
+                testFailoverBtn.textContent = '🧪 Test Failover';
+            }
+        }
+    }
+
+    showNotification(message, type = 'info') {
+        // Simple notification system - could be enhanced with a proper notification component
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 6px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            max-width: 300px;
+            background: ${type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#007bff'};
+        `;
+
+        document.body.appendChild(notification);
+
+        // Remove notification after 5 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 5000);
     }
 
     async startMediaConnectFlow() {

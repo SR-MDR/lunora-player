@@ -83,10 +83,25 @@
                         </div>
                     </div>
 
-                    <!-- Failover Status -->
-                    <div class="failover-status" id="failover-status">
-                        <span class="failover-label">🔄 Failover:</span>
-                        <span class="failover-state" id="failover-state">Disabled</span>
+                    <!-- Failover Status and Controls -->
+                    <div class="failover-section">
+                        <div class="failover-status" id="failover-status">
+                            <span class="failover-label">🔄 Failover:</span>
+                            <span class="failover-state" id="failover-state">Disabled</span>
+                        </div>
+
+                        <!-- Failover Controls -->
+                        <div class="failover-controls" id="failover-controls" style="display: none;">
+                            <button id="add-backup-btn" class="btn-small btn-secondary">
+                                ➕ Add Backup
+                            </button>
+                            <button id="enable-failover-btn" class="btn-small btn-primary">
+                                🔄 Enable Failover
+                            </button>
+                            <button id="test-failover-btn" class="btn-small btn-warning" style="display: none;">
+                                🧪 Test Failover
+                            </button>
+                        </div>
                     </div>
                 </div>
 

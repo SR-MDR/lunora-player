@@ -1086,6 +1086,110 @@ const getInputHealthMonitoring = async () => {
     }
 };
 
+// ============================================================================
+// DUAL SOURCE MANAGEMENT FUNCTIONS
+// ============================================================================
+
+const getAllSources = async () => {
+    try {
+        const result = await multiChannelManager.getAllSources();
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            ...result
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to get all sources');
+    }
+};
+
+const getSourcesHealth = async () => {
+    try {
+        const result = await multiChannelManager.getInputHealthMonitoring();
+
+        // Handle both success and error cases from getInputHealthMonitoring
+        if (result.status === 'error') {
+            return createResponse(200, {
+                status: 'success',
+                timestamp: new Date().toISOString(),
+                sources_health: {
+                    sources: [],
+                    failover_config: null,
+                    overall_status: 'error',
+                    message: result.message
+                }
+            });
+        }
+
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            sources_health: {
+                sources: result.sources || [],
+                failover_config: result.failover_config,
+                overall_status: result.status || 'healthy'
+            }
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to get sources health');
+    }
+};
+
+const addBackupSource = async (event) => {
+    try {
+        const body = JSON.parse(event.body || '{}');
+        const sourceConfig = {
+            name: body.name || 'Backup-SRT-Source',
+            ingestPort: body.ingestPort || 9999,
+            whitelistCidr: body.whitelistCidr || '0.0.0.0/0',
+            description: body.description || 'Backup SRT source for failover redundancy'
+        };
+
+        const result = await multiChannelManager.addBackupSource(sourceConfig);
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            message: 'Backup source added successfully',
+            ...result
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to add backup source');
+    }
+};
+
+const configureFailover = async (event) => {
+    try {
+        const body = JSON.parse(event.body || '{}');
+        const failoverConfig = {
+            enabled: body.enabled !== false, // Default to enabled
+            primarySource: body.primarySource || null
+        };
+
+        const result = await multiChannelManager.configureFailover(failoverConfig);
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            message: 'Failover configuration updated successfully',
+            ...result
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to configure failover');
+    }
+};
+
+const getFailoverStatus = async () => {
+    try {
+        const result = await multiChannelManager.getFailoverStatus();
+        return createResponse(200, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            ...result
+        });
+    } catch (error) {
+        return handleError(error, 'Failed to get failover status');
+    }
+};
+
 const startMediaConnectFlow = async () => {
     try {
         const result = await multiChannelManager.startMediaConnectFlow();
@@ -1315,6 +1419,31 @@ exports.handler = async (event) => {
 
         if (path === '/api/mediaconnect/inputs/health' && httpMethod === 'GET') {
             return await getInputHealthMonitoring();
+        }
+
+        // Dual Source Management Routes
+        if (path === '/api/mediaconnect/sources' && httpMethod === 'GET') {
+            return await getAllSources();
+        }
+
+        if (path === '/api/mediaconnect/sources/health' && httpMethod === 'GET') {
+            return await getSourcesHealth();
+        }
+
+        if (path === '/api/mediaconnect/sources/add-backup' && httpMethod === 'POST') {
+            return await addBackupSource(event);
+        }
+
+        if (path === '/api/mediaconnect/sources/failover' && httpMethod === 'POST') {
+            return await configureFailover(event);
+        }
+
+        if (path === '/api/mediaconnect/failover/status' && httpMethod === 'GET') {
+            return await getFailoverStatus();
+        }
+
+        if (path === '/api/mediaconnect/failover/configure' && httpMethod === 'POST') {
+            return await configureFailover(event);
         }
 
         if (path === '/api/channels/validate' && httpMethod === 'GET') {

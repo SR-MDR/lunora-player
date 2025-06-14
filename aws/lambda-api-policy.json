@@ -46,6 +46,20 @@
         {
             "Effect": "Allow",
             "Action": [
+                "mediaconnect:DescribeFlow",
+                "mediaconnect:ListFlows",
+                "mediaconnect:StartFlow",
+                "mediaconnect:StopFlow",
+                "mediaconnect:AddFlowSources",
+                "mediaconnect:RemoveFlowSource",
+                "mediaconnect:UpdateFlow",
+                "mediaconnect:UpdateFlowSource"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
                 "logs:CreateLogGroup",
                 "logs:CreateLogStream",
                 "logs:PutLogEvents"
