@@ -185,4 +185,27 @@ ls -la deployment-dir/
 
 ---
 
+## 🔗 **API ENDPOINT CONSISTENCY ISSUES (June 13, 2025)**
+
+### **PROBLEM**: Frontend calling incorrect API endpoints causing 404 errors
+- Health endpoint was calling `/health` instead of `/api/health`
+- Streaming status was calling `/api/destinations/status` instead of `/api/streaming/status`
+
+### **ROOT CAUSE**: Inconsistent endpoint usage between frontend and backend
+- Backend correctly implements `/api/health` and `/api/streaming/status`
+- Frontend had hardcoded wrong endpoints
+
+### **SOLUTION**:
+- Fixed health endpoint: Use `${this.apiBaseUrl}/health` → `/api/health`
+- Fixed streaming status: Use `${this.apiBaseUrl}/streaming/status` → `/api/streaming/status`
+- Deploy frontend and invalidate CloudFront cache
+
+### **PREVENTION**:
+- Always verify API endpoints match between frontend and backend
+- Use consistent `apiBaseUrl` variable instead of hardcoded URLs
+- Test API calls in browser developer tools during development
+- Document all API endpoints in a single source of truth
+
+---
+
 *This document should be referenced before any future production deployments to avoid repeating these issues.*
