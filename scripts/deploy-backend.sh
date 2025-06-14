@@ -1,11 +1,22 @@
 #!/bin/bash
 
-# Lunora Player - Systematic Lambda Deployment Script
+# Lunora Player - Backend Lambda Deployment Script
 # Prevents recurring deployment issues by automating the entire process
+# Usage: Run from project root: ./scripts/deploy-backend.sh
 
 set -e  # Exit on any error
 
-echo "🚀 Starting Lunora Player Lambda Deployment..."
+# Change to backend directory from project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+BACKEND_DIR="$PROJECT_ROOT/backend"
+
+echo "🚀 Starting Lunora Player Backend Lambda Deployment..."
+echo "📁 Project root: $PROJECT_ROOT"
+echo "📁 Backend directory: $BACKEND_DIR"
+
+# Change to backend directory
+cd "$BACKEND_DIR"
 
 # Configuration
 FUNCTION_NAME="lunora-player-prod-dynamic-streaming-api"
