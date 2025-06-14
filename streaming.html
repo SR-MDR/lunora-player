@@ -60,25 +60,35 @@
                     <div class="sources-container">
                         <!-- Primary Source -->
                         <div class="source-item" id="primary-source">
-                            <div class="source-status">
-                                <span class="source-indicator" id="primary-source-indicator">🔴</span>
-                                <span class="source-name" id="primary-source-name">Source 1</span>
+                            <div class="source-header">
+                                <div class="source-status">
+                                    <span class="source-name" id="primary-source-name">Source 1</span>
+                                    <span class="source-protocol" id="primary-source-protocol">SRT</span>
+                                </div>
                             </div>
-                            <div class="source-metrics">
-                                <span class="source-bandwidth" id="primary-source-bandwidth">0 Mbps</span>
-                                <span class="source-protocol" id="primary-source-protocol">SRT</span>
+                            <div class="source-details">
+                                <span class="source-endpoint" id="primary-source-bandwidth">0 Mbps</span>
+                                <div class="source-status-indicator">
+                                    <span class="source-indicator" id="primary-source-indicator">🔴</span>
+                                    <span class="source-status-text" id="primary-source-status">Disconnected</span>
+                                </div>
                             </div>
                         </div>
 
                         <!-- Secondary Source (for failover) -->
                         <div class="source-item" id="secondary-source" style="display: none;">
-                            <div class="source-status">
-                                <span class="source-indicator" id="secondary-source-indicator">🔴</span>
-                                <span class="source-name" id="secondary-source-name">Source 2</span>
+                            <div class="source-header">
+                                <div class="source-status">
+                                    <span class="source-name" id="secondary-source-name">Source 2</span>
+                                    <span class="source-protocol" id="secondary-source-protocol">SRT</span>
+                                </div>
                             </div>
-                            <div class="source-metrics">
-                                <span class="source-bandwidth" id="secondary-source-bandwidth">0 Mbps</span>
-                                <span class="source-protocol" id="secondary-source-protocol">SRT</span>
+                            <div class="source-details">
+                                <span class="source-endpoint" id="secondary-source-bandwidth">0 Mbps</span>
+                                <div class="source-status-indicator">
+                                    <span class="source-indicator" id="secondary-source-indicator">🔴</span>
+                                    <span class="source-status-text" id="secondary-source-status">Disconnected</span>
+                                </div>
                             </div>
                         </div>
                     </div>

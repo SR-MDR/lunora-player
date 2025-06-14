@@ -464,14 +464,30 @@ class StreamingController {
     updateSourceDisplay(sourceType, sourceData, failoverData) {
         if (!sourceData) return;
 
+        const sourceItem = document.getElementById(`${sourceType}-source`);
         const indicator = document.getElementById(`${sourceType}-source-indicator`);
         const name = document.getElementById(`${sourceType}-source-name`);
         const bandwidth = document.getElementById(`${sourceType}-source-bandwidth`);
         const protocol = document.getElementById(`${sourceType}-source-protocol`);
+        const statusText = document.getElementById(`${sourceType}-source-status`);
+
+        // Update connection status styling
+        if (sourceItem) {
+            if (sourceData.status === 'connected') {
+                sourceItem.classList.add('connected');
+            } else {
+                sourceItem.classList.remove('connected');
+            }
+        }
 
         if (indicator) {
             // Update indicator based on connection status
             indicator.textContent = sourceData.status === 'connected' ? '🟢' : '🔴';
+        }
+
+        if (statusText) {
+            // Update status text
+            statusText.textContent = sourceData.status === 'connected' ? 'Connected' : 'Disconnected';
         }
 
         if (name) {

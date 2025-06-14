@@ -890,7 +890,11 @@ body {
     border-radius: 4px;
     padding: 8px;
     margin-bottom: 6px;
-    border-left: 3px solid #4CAF50;
+    border-left: 3px solid #f44336; /* Red for disconnected */
+}
+
+.source-item.connected {
+    border-left: 3px solid #4CAF50; /* Green for connected */
 }
 
 .source-item:last-child {
@@ -904,16 +908,22 @@ body {
     margin-bottom: 4px;
 }
 
+.source-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .source-name {
     font-size: 11px;
     font-weight: 500;
-    color: #e0e0e0;
+    color: #000000; /* Black text for better readability */
 }
 
 .source-protocol {
     font-size: 10px;
-    color: #999;
-    background: rgba(255, 255, 255, 0.1);
+    color: #000000; /* Black text */
+    background: rgba(0, 0, 0, 0.1);
     padding: 2px 6px;
     border-radius: 3px;
 }
@@ -923,16 +933,29 @@ body {
     justify-content: space-between;
     align-items: center;
     font-size: 10px;
-    color: #bbb;
+    color: #000000; /* Black text */
 }
 
 .source-endpoint {
     font-family: 'Courier New', monospace;
+    color: #000000; /* Black text */
+}
+
+.source-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.source-status-text {
+    font-size: 10px;
+    font-weight: 500;
+    color: #000000; /* Black text */
 }
 
 .source-bandwidth {
     font-weight: 500;
-    color: #4CAF50;
+    color: #000000; /* Black text */
 }
 
 .failover-status {
@@ -957,77 +980,7 @@ body {
     font-weight: 500;
 }
 
-/* ============================================================================
-   SOURCE HEALTH SECTION
-   ============================================================================ */
 
-.source-health-section {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 8px;
-}
-
-.source-health-header h4 {
-    margin: 0 0 8px 0;
-    font-size: 12px;
-    color: #e0e0e0;
-    font-weight: 500;
-}
-
-.sources-list {
-    margin-bottom: 8px;
-}
-
-.source-item {
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 4px;
-    padding: 8px;
-    margin-bottom: 6px;
-    border-left: 3px solid #4CAF50;
-}
-
-.source-item:last-child {
-    margin-bottom: 0;
-}
-
-.source-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 4px;
-}
-
-.source-name {
-    font-size: 11px;
-    font-weight: 500;
-    color: #e0e0e0;
-}
-
-.source-protocol {
-    font-size: 10px;
-    color: #999;
-    background: rgba(255, 255, 255, 0.1);
-    padding: 2px 6px;
-    border-radius: 3px;
-}
-
-.source-details {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 10px;
-    color: #bbb;
-}
-
-.source-endpoint {
-    font-family: 'Courier New', monospace;
-}
-
-.source-bandwidth {
-    font-weight: 500;
-    color: #4CAF50;
-}
 
 .failover-status {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
