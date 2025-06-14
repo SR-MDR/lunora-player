@@ -1105,9 +1105,9 @@ const getAllSources = async () => {
 
 const getSourcesHealth = async () => {
     try {
-        const result = await multiChannelManager.getInputHealthMonitoring();
+        const result = await multiChannelManager.getAllSources();
 
-        // Handle both success and error cases from getInputHealthMonitoring
+        // Handle both success and error cases from getAllSources
         if (result.status === 'error') {
             return createResponse(200, {
                 status: 'success',
@@ -1121,13 +1121,26 @@ const getSourcesHealth = async () => {
             });
         }
 
+        // Determine overall status based on connected sources
+        const connectedSources = result.connected_sources || 0;
+        const totalSources = result.total_sources || 0;
+        let overallStatus = 'healthy';
+
+        if (connectedSources === 0) {
+            overallStatus = 'degraded';
+        } else if (connectedSources < totalSources) {
+            overallStatus = 'partial';
+        }
+
         return createResponse(200, {
             status: 'success',
             timestamp: new Date().toISOString(),
             sources_health: {
                 sources: result.sources || [],
                 failover_config: result.failover_config,
-                overall_status: result.status || 'healthy'
+                overall_status: overallStatus,
+                connected_sources: connectedSources,
+                total_sources: totalSources
             }
         });
     } catch (error) {

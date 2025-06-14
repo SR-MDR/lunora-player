@@ -471,9 +471,17 @@ class RobustMultiChannelManager {
             // Handle both single source (legacy) and dual source configurations
             const sources = result.Flow.Sources || (result.Flow.Source ? [result.Flow.Source] : []);
 
-            // Map sources with proper connection status based on PeerIpAddress
+            // Map sources with proper connection status using multiple indicators
             const sourcesWithHealth = sources.map((source, index) => {
-                const isConnected = source.PeerIpAddress && source.PeerIpAddress.trim() !== '';
+                // For SRT sources, check multiple indicators of connection status
+                const hasPeerIp = source.PeerIpAddress && source.PeerIpAddress.trim() !== '';
+                const hasIngestIp = source.IngestIp && source.IngestIp.trim() !== '';
+                const isFlowActive = result.Flow.Status === 'ACTIVE';
+
+                // Consider a source connected if:
+                // 1. It has a peer IP address (active connection), OR
+                // 2. The flow is active and the source has an ingest IP (ready to receive)
+                const isConnected = hasPeerIp || (isFlowActive && hasIngestIp);
 
                 return {
                     name: source.Name || `Source ${index + 1}`,
@@ -484,7 +492,10 @@ class RobustMultiChannelManager {
                     status: isConnected ? 'connected' : 'disconnected',
                     whitelist_cidr: source.WhitelistCidr,
                     peer_ip: source.PeerIpAddress || null,
-                    description: source.Description || ''
+                    description: source.Description || '',
+                    flow_status: result.Flow.Status,
+                    has_peer_ip: hasPeerIp,
+                    has_ingest_ip: hasIngestIp
                 };
             });
 
@@ -584,9 +595,17 @@ class RobustMultiChannelManager {
             const sources = result.Flow.Sources || (result.Flow.Source ? [result.Flow.Source] : []);
             const failoverConfig = result.Flow.SourceFailoverConfig;
 
-            // Map sources with proper connection status
+            // Map sources with proper connection status using multiple indicators
             const sourcesWithHealth = sources.map(source => {
-                const isConnected = source.PeerIpAddress && source.PeerIpAddress.trim() !== '';
+                // For SRT sources, check multiple indicators of connection status
+                const hasPeerIp = source.PeerIpAddress && source.PeerIpAddress.trim() !== '';
+                const hasIngestIp = source.IngestIp && source.IngestIp.trim() !== '';
+                const isFlowActive = result.Flow.Status === 'ACTIVE';
+
+                // Consider a source connected if:
+                // 1. It has a peer IP address (active connection), OR
+                // 2. The flow is active and the source has an ingest IP (ready to receive)
+                const isConnected = hasPeerIp || (isFlowActive && hasIngestIp);
 
                 return {
                     name: source.Name,
@@ -596,7 +615,10 @@ class RobustMultiChannelManager {
                     is_primary: source.Name === failoverConfig?.SourcePriority?.PrimarySource,
                     protocol: source.Transport?.Protocol || source.Protocol || 'unknown',
                     ingest_ip: source.IngestIp,
-                    ingest_port: source.IngestPort
+                    ingest_port: source.IngestPort,
+                    flow_status: result.Flow.Status,
+                    has_peer_ip: hasPeerIp,
+                    has_ingest_ip: hasIngestIp
                 };
             });
 
