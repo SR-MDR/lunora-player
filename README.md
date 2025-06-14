@@ -27,10 +27,14 @@ cd lunora-player
 npm install
 ```
 
-### 2. Deploy Backend
+### 2. Deploy Application
 ```bash
-cd backend
-./deploy.sh
+# Complete deployment (recommended)
+./scripts/deploy-all.sh
+
+# Or deploy components individually
+./scripts/deploy-backend.sh    # Backend Lambda only
+./scripts/deploy-frontend.sh   # Frontend S3/CloudFront only
 ```
 
 ### 3. Access Applications
@@ -83,9 +87,15 @@ Videon Edge (SRT) → MediaConnect → Dynamic MediaLive Channels → RTMP Desti
 ### Project Structure
 ```
 lunora-player/
+├── scripts/                        # Deployment & verification scripts
+│   ├── deploy-all.sh               # Complete deployment pipeline
+│   ├── deploy-backend.sh           # Backend Lambda deployment
+│   ├── deploy-frontend.sh          # Frontend S3/CloudFront deployment
+│   ├── verify-backend-deployment.sh # Backend verification
+│   ├── verify-frontend-deployment.sh # Frontend verification
+│   └── README.md                   # Scripts documentation
 ├── backend/
 │   ├── index.js                    # Main Lambda handler
-│   ├── deploy.sh                   # Automated deployment
 │   ├── multi-channel-manager-robust.js
 │   ├── schema-migration.js
 │   └── default-presets.js
@@ -94,24 +104,31 @@ lunora-player/
 │   ├── multi-destination.js        # Streaming management
 │   └── streaming-control.js        # Dashboard controller
 ├── css/                            # Styling
-├── docs/                           # Documentation
 └── aws/cloudformation/             # Infrastructure templates
 ```
 
-### Backend Deployment
-The backend uses a **systematic deployment solution** that prevents recurring issues:
+### Deployment System
+The application uses a **professional deployment system** with organized scripts:
 
 ```bash
-cd backend
-./deploy.sh  # Single command deployment
+# Complete deployment pipeline (recommended)
+./scripts/deploy-all.sh
+
+# Individual components
+./scripts/deploy-backend.sh     # Backend Lambda
+./scripts/deploy-frontend.sh    # Frontend to S3/CloudFront
+
+# Verification
+./scripts/verify-backend-deployment.sh   # Verify backend
+./scripts/verify-frontend-deployment.sh  # Verify frontend
 ```
 
-**What it does:**
-1. 🧹 Cleans up existing deployment artifacts
-2. 🔍 Analyzes dependencies automatically
-3. 📦 Copies all required files
-4. 🚀 Deploys to Lambda with verification
-5. 🧪 Tests deployment with health check
+**Complete Pipeline (`deploy-all.sh`) does:**
+1. 🚀 Deploys backend Lambda with dependency analysis
+2. 🌐 Deploys frontend to S3 and invalidates CloudFront
+3. 🔍 Verifies backend deployment (100% file matching)
+4. 🔍 Verifies frontend deployment (100% file matching)
+5. 📊 Provides complete status summary
 
 ### Frontend Development
 ```bash
@@ -203,7 +220,8 @@ Configure your Videon Edge node:
 1. **Stream not loading**: Check MediaLive channel status
 2. **API errors**: Verify Lambda function logs in CloudWatch
 3. **CORS errors**: Check CloudFront CORS configuration
-4. **Deployment issues**: Use `./deploy.sh` for systematic deployment
+4. **Deployment issues**: Use `./scripts/deploy-all.sh` for systematic deployment
+5. **File sync issues**: Use verification scripts to check deployment status
 
 ### Debug Resources
 - **Lambda Logs**: `/aws/lambda/lunora-player-prod-dynamic-streaming-api`
@@ -213,11 +231,12 @@ Configure your Videon Edge node:
 ## 🚀 **Deployment Lessons Learned**
 
 ### Critical Success Factors
-1. **Single Source of Truth**: `backend/index.js` is the only source file
-2. **Automated Deployment**: Use `./deploy.sh` for all deployments
-3. **Dependency Analysis**: Automatic detection prevents missing files
-4. **Clean Deployment**: Removes all temporary files and artifacts
-5. **Health Check Verification**: Confirms deployment success
+1. **Organized Scripts**: All deployment tools in `scripts/` folder
+2. **Complete Pipeline**: Use `./scripts/deploy-all.sh` for full deployment
+3. **Verification System**: 100% file matching verification for both frontend and backend
+4. **Single Source of Truth**: `backend/index.js` is the only backend source file
+5. **Automated Dependency Analysis**: Prevents missing files in Lambda deployment
+6. **Clean Deployment**: Removes all temporary files and artifacts
 
 ### Best Practices
 - ✅ Always backup working code before changes

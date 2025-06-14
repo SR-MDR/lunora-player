@@ -37,8 +37,11 @@
 
 ### **Single Command Deployment**
 ```bash
-cd backend
-./deploy.sh
+# From project root - deploy backend only
+./scripts/deploy-backend.sh
+
+# Or deploy everything (backend + frontend + verification)
+./scripts/deploy-all.sh
 ```
 
 ### **What the Script Does**
@@ -100,7 +103,9 @@ CORS is handled by Lambda Function URL settings, NOT in code. If CORS issues app
 ## 🎯 **SINGLE SOURCE OF TRUTH**
 
 - **Main Handler**: `backend/index.js` (ONLY source file)
-- **Deployment Script**: `backend/deploy.sh` (automated deployment)
+- **Deployment Script**: `scripts/deploy-backend.sh` (automated deployment)
+- **Frontend Deployment**: `scripts/deploy-frontend.sh` (S3 + CloudFront)
+- **Complete Pipeline**: `scripts/deploy-all.sh` (backend + frontend + verification)
 - **Dependencies**: Automatically detected via `require()` analysis
 - **Configuration**: All settings in `index.js` CONFIG object
 
@@ -109,8 +114,8 @@ CORS is handled by Lambda Function URL settings, NOT in code. If CORS issues app
 - Any `.zip` files (they're temporary)
 
 **✅ EDIT ONLY:**
-- `index.js` (main source - follows Lambda convention)
-- `deploy.sh` (deployment script)
+- `backend/index.js` (main source - follows Lambda convention)
+- `scripts/deploy-backend.sh` (deployment script)
 - Individual dependency files (if needed)
 
 ---
@@ -119,8 +124,8 @@ CORS is handled by Lambda Function URL settings, NOT in code. If CORS issues app
 
 If deployment fails:
 1. **Check logs**: `aws logs tail /aws/lambda/lunora-player-prod-dynamic-streaming-api --profile lunora-media --region us-west-2`
-2. **Fix issue** in `index.js`
-3. **Re-run deployment**: `./deploy.sh`
+2. **Fix issue** in `backend/index.js`
+3. **Re-run deployment**: `./scripts/deploy-backend.sh`
 
 **DO NOT:**
 - Manually edit deployed files
@@ -148,3 +153,30 @@ If deployment fails:
 - ❌ `env-vars.json` - Unused environment config (deleted)
 
 **TOTAL CLEANUP:** ~70KB of unused code removed for a cleaner, more maintainable codebase.
+
+---
+
+## 📁 **ORGANIZED SCRIPTS STRUCTURE**
+
+**NEW SCRIPTS FOLDER:**
+```
+scripts/
+├── deploy-all.sh                    # Complete deployment pipeline
+├── deploy-backend.sh                # Backend Lambda deployment
+├── deploy-frontend.sh               # Frontend S3/CloudFront deployment
+├── verify-backend-deployment.sh     # Backend verification
+├── verify-frontend-deployment.sh    # Frontend verification
+└── README.md                        # Complete documentation
+```
+
+**USAGE:**
+- **Complete deployment**: `./scripts/deploy-all.sh`
+- **Backend only**: `./scripts/deploy-backend.sh`
+- **Frontend only**: `./scripts/deploy-frontend.sh`
+- **Verification**: `./scripts/verify-backend-deployment.sh`
+
+**BENEFITS:**
+- ✅ Clear naming convention (deploy-* and verify-* prefixes)
+- ✅ All deployment tools in one organized location
+- ✅ Complete pipeline with verification steps
+- ✅ Professional deployment workflow
