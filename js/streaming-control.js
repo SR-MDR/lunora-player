@@ -79,8 +79,8 @@ class StreamingController {
         const awsStatusElement = document.getElementById('aws-status');
 
         try {
-            // Use the correct health endpoint (without /api prefix)
-            const response = await fetch(`https://rdmgtdz2eu4pj43igkvh6fvaly0xovke.lambda-url.us-west-2.on.aws/health`);
+            // Use the correct health endpoint (with /api prefix)
+            const response = await fetch(`${this.apiBaseUrl}/health`);
             const data = await response.json();
             
             if (data.status === 'healthy') {
@@ -126,7 +126,7 @@ class StreamingController {
             }
 
             // Update streaming status (use the correct endpoint)
-            const streamingResponse = await fetch(`${this.apiBaseUrl}/destinations/status`);
+            const streamingResponse = await fetch(`${this.apiBaseUrl}/streaming/status`);
             const streamingData = await streamingResponse.json();
             
             if (streamingData.status === 'success') {
