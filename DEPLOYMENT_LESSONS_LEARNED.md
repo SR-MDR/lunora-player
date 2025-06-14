@@ -119,4 +119,70 @@ aws lambda add-permission --action lambda:InvokeFunctionUrl
 
 ---
 
+## 🚨 **CRITICAL: SYSTEMATIC DEPLOYMENT PROCESS TO PREVENT RECURRING ISSUES**
+
+### **PROBLEM ANALYSIS (June 14, 2025)**
+**Recurring Issues:**
+1. ❌ Multiple conflicting `index.js` files in different directories
+2. ❌ CORS issues reappearing after rollbacks
+3. ❌ Missing dependencies in every deployment
+4. ❌ Duplicate deployment directories causing confusion
+
+### **ROOT CAUSES:**
+1. **No single source of truth** for deployment files
+2. **Manual deployment process** prone to human error
+3. **CORS configured in multiple places** (Function URL + code)
+4. **No systematic dependency analysis**
+
+---
+
+## 🔧 **SYSTEMATIC DEPLOYMENT DEPENDENCY CHECKLIST**
+
+### **CRITICAL: Always Analyze ALL require() Statements Before Deployment**
+
+**Problem**: Repeatedly missing local file dependencies in Lambda deployments
+**Root Cause**: Not systematically checking all `require()` statements in main file
+**Solution**: Use this checklist for EVERY deployment
+
+#### **Pre-Deployment Dependency Analysis:**
+```bash
+# 1. Find ALL require statements in main handler file
+grep -n "require(" lambda-handler.js
+
+# 2. Identify local vs npm dependencies
+# Local files: require('./filename') or require('../path')
+# NPM packages: require('package-name')
+
+# 3. For each local file dependency, recursively check ITS dependencies
+grep -n "require(" dependency-file.js
+
+# 4. Copy ALL local dependencies to deployment directory
+cp dependency1.js deployment-dir/
+cp dependency2.js deployment-dir/
+# etc.
+
+# 5. Verify all files present before zipping
+ls -la deployment-dir/
+```
+
+#### **Deployment Package Contents Verification:**
+- [ ] Main handler file (index.js)
+- [ ] package.json with correct dependencies
+- [ ] node_modules/ with all npm packages
+- [ ] ALL local file dependencies identified via require() analysis
+- [ ] ALL transitive local dependencies (dependencies of dependencies)
+
+#### **Example from June 14, 2025 Fix:**
+**Main file**: `lambda-handler.js` required:
+- ✅ `aws-sdk` (npm - included)
+- ❌ `./multi-channel-manager-robust` (local - MISSING)
+- ❌ `./schema-migration` (local - MISSING)
+
+**Transitive dependency**: `schema-migration.js` required:
+- ❌ `./default-presets` (local - MISSING)
+
+**Result**: 3 missing files caused 502 Bad Gateway errors
+
+---
+
 *This document should be referenced before any future production deployments to avoid repeating these issues.*

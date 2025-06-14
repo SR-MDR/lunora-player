@@ -77,9 +77,10 @@ class StreamingController {
         const statusElement = document.getElementById('connection-status');
         const backendStatusElement = document.getElementById('backend-status');
         const awsStatusElement = document.getElementById('aws-status');
-        
+
         try {
-            const response = await fetch(`${this.apiBaseUrl}/health`);
+            // Use the correct health endpoint (without /api prefix)
+            const response = await fetch(`https://rdmgtdz2eu4pj43igkvh6fvaly0xovke.lambda-url.us-west-2.on.aws/health`);
             const data = await response.json();
             
             if (data.status === 'healthy') {
@@ -124,8 +125,8 @@ class StreamingController {
                 this.updateStatusValue('destinations-count', `${enabledCount}/${destinationsData.count}`);
             }
 
-            // Update streaming status
-            const streamingResponse = await fetch(`${this.apiBaseUrl}/streaming/status`);
+            // Update streaming status (use the correct endpoint)
+            const streamingResponse = await fetch(`${this.apiBaseUrl}/destinations/status`);
             const streamingData = await streamingResponse.json();
             
             if (streamingData.status === 'success') {

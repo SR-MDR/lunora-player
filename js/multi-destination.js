@@ -1,7 +1,7 @@
 // Lunora Player - Multi-Destination Streaming Management
 class MultiDestinationManager {
     constructor() {
-        this.apiBaseUrl = 'https://hi2pfpdbrlcry5w73wt27xrniu0vhykl.lambda-url.us-west-2.on.aws/api';
+        this.apiBaseUrl = 'https://rdmgtdz2eu4pj43igkvh6fvaly0xovke.lambda-url.us-west-2.on.aws/api';
         this.destinations = [];
         this.presets = [];
         this.streamingStatus = {
