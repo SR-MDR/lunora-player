@@ -259,9 +259,9 @@ body {
 }
 
 .status-label {
-    color: #6c757d;
-    font-weight: 500;
-    font-size: 0.9rem;
+    color: #000000; /* Black text for better readability */
+    font-weight: 600; /* Bolder weight */
+    font-size: 1.1rem; /* Larger font size */
 }
 
 .status-value {
@@ -284,14 +284,14 @@ body {
 .source-health-header {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
+    gap: 8px; /* Increased gap */
+    margin-bottom: 12px; /* Increased margin */
 }
 
 .sources-container {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 10px; /* Increased gap between sources */
     width: 100%;
 }
 
@@ -869,9 +869,10 @@ body {
 
 .source-health-section {
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 8px;
+    border-radius: 12px; /* Larger border radius */
+    padding: 20px; /* Increased padding */
+    margin-bottom: 12px; /* Increased margin */
+    min-width: 320px; /* Increased minimum width */
 }
 
 .source-health-header h4 {
@@ -887,14 +888,15 @@ body {
 
 .source-item {
     background: rgba(255, 255, 255, 0.03);
-    border-radius: 4px;
-    padding: 8px;
-    margin-bottom: 6px;
-    border-left: 3px solid #f44336; /* Red for disconnected */
+    border-radius: 8px; /* Larger border radius */
+    padding: 16px; /* Increased padding */
+    margin-bottom: 12px; /* Increased margin */
+    border-left: 5px solid #f44336; /* Thicker red border for disconnected */
+    min-height: 60px; /* Minimum height for larger boxes */
 }
 
 .source-item.connected {
-    border-left: 3px solid #4CAF50; /* Green for connected */
+    border-left: 5px solid #4CAF50; /* Thicker green border for connected */
 }
 
 .source-item:last-child {
@@ -905,57 +907,65 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 4px;
+    margin-bottom: 8px; /* Increased margin */
 }
 
 .source-status {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px; /* Increased gap */
 }
 
 .source-name {
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 14px; /* Increased from 11px */
+    font-weight: 600; /* Bolder weight */
     color: #000000; /* Black text for better readability */
 }
 
 .source-protocol {
-    font-size: 10px;
+    font-size: 12px; /* Increased from 10px */
     color: #000000; /* Black text */
     background: rgba(0, 0, 0, 0.1);
-    padding: 2px 6px;
-    border-radius: 3px;
+    padding: 4px 8px; /* Increased padding */
+    border-radius: 4px; /* Larger border radius */
+    font-weight: 500;
 }
 
 .source-details {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 10px;
+    font-size: 12px; /* Increased from 10px */
     color: #000000; /* Black text */
 }
 
 .source-endpoint {
     font-family: 'Courier New', monospace;
     color: #000000; /* Black text */
+    font-size: 12px; /* Increased from 10px */
+    font-weight: 500;
 }
 
 .source-status-indicator {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px; /* Increased gap */
+}
+
+.source-indicator {
+    font-size: 1.2rem; /* Larger emoji indicators */
 }
 
 .source-status-text {
-    font-size: 10px;
-    font-weight: 500;
+    font-size: 12px; /* Increased from 10px */
+    font-weight: 600; /* Bolder weight */
     color: #000000; /* Black text */
 }
 
 .source-bandwidth {
     font-weight: 500;
     color: #000000; /* Black text */
+    font-size: 12px; /* Increased from default */
 }
 
 .failover-status {
