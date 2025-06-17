@@ -1,10 +1,12 @@
 const { MediaLiveClient, StartChannelCommand, StopChannelCommand, DescribeChannelCommand } = require('@aws-sdk/client-medialive');
 const { MediaConnectClient, DescribeFlowCommand, StartFlowCommand, StopFlowCommand, AddFlowSourcesCommand, UpdateFlowCommand, DescribeFlowSourceMetadataCommand } = require('@aws-sdk/client-mediaconnect');
 const { CloudWatchClient, PutMetricDataCommand, GetMetricStatisticsCommand, GetMetricDataCommand } = require('@aws-sdk/client-cloudwatch');
+const { EventBridgeClient, PutEventsCommand } = require('@aws-sdk/client-eventbridge');
 
 const medialive = new MediaLiveClient({ region: 'us-west-2' });
 const mediaconnect = new MediaConnectClient({ region: 'us-west-2' });
 const cloudwatch = new CloudWatchClient({ region: 'us-west-2' });
+const eventbridge = new EventBridgeClient({ region: 'us-west-2' });
 
 class RobustMultiChannelManager {
     constructor() {
@@ -515,6 +517,79 @@ class RobustMultiChannelManager {
         }
     }
 
+    /**
+     * Send custom EventBridge event for source health changes
+     * This enables real-time notifications and webhooks
+     */
+    async sendSourceHealthEvent(sourceArn, sourceName, previousStatus, currentStatus, confidence) {
+        try {
+            const eventDetail = {
+                sourceArn,
+                sourceName,
+                previousStatus,
+                currentStatus,
+                confidence,
+                timestamp: new Date().toISOString(),
+                flowArn: this.mediaConnectFlowArn
+            };
+
+            const params = {
+                Entries: [
+                    {
+                        Source: 'lunora.player.mediaconnect',
+                        DetailType: 'MediaConnect Source Health Change',
+                        Detail: JSON.stringify(eventDetail),
+                        Time: new Date()
+                    }
+                ]
+            };
+
+            await eventbridge.send(new PutEventsCommand(params));
+            console.log(`EventBridge event sent for ${sourceName}: ${previousStatus} → ${currentStatus}`);
+
+        } catch (error) {
+            console.error('Error sending EventBridge event:', error);
+            // Don't throw - events are non-critical
+        }
+    }
+
+    /**
+     * Compare source statuses and send events for changes
+     */
+    async detectAndNotifySourceChanges(previousSources, currentSources) {
+        try {
+            if (!previousSources || !Array.isArray(previousSources)) return;
+
+            const previousStatusMap = {};
+            previousSources.forEach(source => {
+                if (source.source_arn) {
+                    previousStatusMap[source.source_arn] = source.status;
+                }
+            });
+
+            for (const currentSource of currentSources) {
+                const sourceArn = currentSource.source_arn;
+                const previousStatus = previousStatusMap[sourceArn];
+                const currentStatus = currentSource.status;
+
+                // Send event if status changed
+                if (previousStatus && previousStatus !== currentStatus) {
+                    await this.sendSourceHealthEvent(
+                        sourceArn,
+                        currentSource.name,
+                        previousStatus,
+                        currentStatus,
+                        currentSource.confidence || 'medium'
+                    );
+                }
+            }
+
+        } catch (error) {
+            console.error('Error detecting source changes:', error);
+            // Don't throw - events are non-critical
+        }
+    }
+
     async getAllChannelStatuses() {
         const statuses = {};
         const errors = {};
@@ -611,8 +686,15 @@ class RobustMultiChannelManager {
 
             if (flowStatus.status !== 'ACTIVE') {
                 return {
-                    status: 'error',
-                    message: 'MediaConnect flow not active',
+                    status: 'flow_inactive',
+                    message: `MediaConnect flow is ${flowStatus.status}, not ACTIVE`,
+                    flow_status: flowStatus.status,
+                    polling_skipped: true,
+                    polling_skip_reason: `Flow status is ${flowStatus.status}, not ACTIVE`,
+                    sources: [],
+                    connected_sources: 0,
+                    total_sources: 0,
+                    last_updated: new Date().toISOString(),
                     flowStatus
                 };
             }
@@ -753,8 +835,46 @@ class RobustMultiChannelManager {
 
             // Handle both single source (legacy) and dual source configurations
             const sources = result.Flow.Sources || (result.Flow.Source ? [result.Flow.Source] : []);
+            const flowStatus = result.Flow.Status;
 
-            // Get fast real-time connection status using hybrid approach
+            // COST OPTIMIZATION: Only poll source health when flow is ACTIVE
+            if (flowStatus !== 'ACTIVE') {
+                console.log(`Flow status is ${flowStatus}, skipping expensive source health polling`);
+
+                // Return basic source info without expensive health checks
+                const basicSources = sources.map((source, index) => ({
+                    name: source.Name || `Source ${index + 1}`,
+                    source_arn: source.SourceArn,
+                    protocol: source.Transport?.Protocol || source.Protocol || 'unknown',
+                    ingest_ip: source.IngestIp,
+                    ingest_port: source.IngestPort,
+                    status: 'flow_inactive',
+                    whitelist_cidr: source.WhitelistCidr,
+                    peer_ip: source.PeerIpAddress || null,
+                    description: source.Description || '',
+                    flow_status: flowStatus,
+                    status_note: `Flow is ${flowStatus} - source health not checked`,
+                    confidence: 'n/a'
+                }));
+
+                return {
+                    status: 'success',
+                    flow_arn: result.Flow.FlowArn,
+                    flow_name: result.Flow.Name,
+                    sources: basicSources,
+                    failover_config: result.Flow.SourceFailoverConfig || null,
+                    connected_sources: 0,
+                    total_sources: basicSources.length,
+                    flow_status: flowStatus,
+                    polling_skipped: true,
+                    polling_skip_reason: `Flow status is ${flowStatus}, not ACTIVE`,
+                    detection_method: 'flow_status_check_only',
+                    last_updated: new Date().toISOString()
+                };
+            }
+
+            // Flow is ACTIVE - proceed with expensive health checks
+            console.log('Flow is ACTIVE, performing detailed source health polling');
             const sourceArns = sources.map(source => source.SourceArn).filter(arn => arn);
             const fastHealthResult = await this.getFastSourceHealth(sourceArns);
             const connectionStatuses = fastHealthResult.sources;
@@ -819,6 +939,8 @@ class RobustMultiChannelManager {
                 failover_config: result.Flow.SourceFailoverConfig || null,
                 connected_sources: sourcesWithHealth.filter(s => s.status === 'connected').length,
                 total_sources: sourcesWithHealth.length,
+                flow_status: flowStatus,
+                polling_skipped: false,
                 detection_method: fastHealthResult.detection_method,
                 metadata_health: fastHealthResult.metadata_health,
                 last_updated: new Date().toISOString()
