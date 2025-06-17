@@ -282,7 +282,7 @@ class RobustMultiChannelManager {
     async getSourceConnectionStatus(sourceArn) {
         try {
             const endTime = new Date();
-            const startTime = new Date(endTime.getTime() - 2 * 60 * 1000); // Last 2 minutes (reduced from 5)
+            const startTime = new Date(endTime.getTime() - 2 * 60 * 1000); // Last 2 minutes for stable data
 
             const params = {
                 Namespace: 'AWS/MediaConnect',
@@ -345,7 +345,7 @@ class RobustMultiChannelManager {
 
             // Use GetMetricData for faster batch queries (more efficient than individual GetMetricStatistics)
             const endTime = new Date();
-            const startTime = new Date(endTime.getTime() - 2 * 60 * 1000); // Last 2 minutes
+            const startTime = new Date(endTime.getTime() - 2 * 60 * 1000); // Last 2 minutes for stable data
 
             const metricDataQueries = sourceArns.map((sourceArn, index) => ({
                 Id: `source_${index}`, // Unique identifier for each query

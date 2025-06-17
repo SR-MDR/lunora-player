@@ -56,6 +56,9 @@
                 <div class="status-item source-health-section" id="source-health-section" style="display: none;">
                     <div class="source-health-header">
                         <span class="status-label">📡 Source Health:</span>
+                        <button class="refresh-btn" id="manual-refresh-btn" onclick="streamingControl.forceRefresh()" title="Force immediate refresh">
+                            🔄
+                        </button>
                     </div>
                     <div class="sources-container">
                         <!-- Primary Source -->

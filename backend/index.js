@@ -1119,6 +1119,18 @@ const getAllSources = async () => {
 
 const getSourcesHealth = async () => {
     try {
+        // CRITICAL FIX: Clear stale EventBridge cache before fetching fresh data
+        // This prevents old cached data from interfering with fresh CloudWatch data
+        if (latestSourceHealth && latestSourceHealth.last_updated) {
+            const cacheAge = Date.now() - new Date(latestSourceHealth.last_updated).getTime();
+            const maxCacheAge = 60000; // 60 seconds
+
+            if (cacheAge > maxCacheAge) {
+                console.log(`Clearing stale EventBridge cache (${cacheAge}ms old)`);
+                latestSourceHealth = null;
+            }
+        }
+
         const result = await multiChannelManager.getAllSources();
 
         // Handle both success and error cases from getAllSources
@@ -1136,31 +1148,51 @@ const getSourcesHealth = async () => {
             });
         }
 
-        // Enhance sources with real-time EventBridge data if available
+        // CRITICAL FIX: Don't override fresh CloudWatch data with stale EventBridge cache
+        // The cache was causing subsequent changes to be missed because stale EventBridge data
+        // was overriding fresh CloudWatch data. EventBridge events aren't being received consistently.
         let enhancedSources = result.sources || [];
-        if (latestSourceHealth) {
-            enhancedSources = enhancedSources.map(source => {
-                const realtimeData = latestSourceHealth[source.source_arn];
-                if (realtimeData && realtimeData.timestamp) {
-                    // Check if real-time data is more recent than polling data
-                    const realtimeTime = new Date(realtimeData.timestamp);
-                    const pollingTime = new Date(result.last_updated || 0);
 
-                    if (realtimeTime > pollingTime) {
-                        return {
-                            ...source,
-                            status: realtimeData.status,
-                            status_note: `${realtimeData.status_note || realtimeData.detection_method} (Real-time EventBridge)`,
-                            confidence: realtimeData.confidence,
-                            detection_method: realtimeData.detection_method,
-                            realtime_update: true,
-                            realtime_timestamp: realtimeData.timestamp,
-                            tr101: realtimeData.tr101
-                        };
+        // Only use EventBridge cache if it's very recent (within last 30 seconds) and CloudWatch data is older
+        if (latestSourceHealth && latestSourceHealth.last_updated) {
+            const cacheAge = Date.now() - new Date(latestSourceHealth.last_updated).getTime();
+            const maxCacheAge = 30000; // 30 seconds
+
+            if (cacheAge < maxCacheAge) {
+                console.log(`EventBridge cache is fresh (${cacheAge}ms old), considering for enhancement`);
+
+                enhancedSources = enhancedSources.map(source => {
+                    const realtimeData = latestSourceHealth[source.source_arn];
+                    if (realtimeData && realtimeData.timestamp) {
+                        // Only use EventBridge data if it's significantly newer than CloudWatch data
+                        const realtimeTime = new Date(realtimeData.timestamp);
+                        const pollingTime = new Date(result.last_updated || 0);
+                        const timeDiff = realtimeTime.getTime() - pollingTime.getTime();
+
+                        // Only override if EventBridge data is at least 10 seconds newer
+                        if (timeDiff > 10000) {
+                            console.log(`Using EventBridge data for ${source.name}: ${timeDiff}ms newer`);
+                            return {
+                                ...source,
+                                status: realtimeData.status,
+                                status_note: `${realtimeData.status_note || realtimeData.detection_method} (Real-time EventBridge)`,
+                                confidence: realtimeData.confidence,
+                                detection_method: realtimeData.detection_method,
+                                realtime_update: true,
+                                realtime_timestamp: realtimeData.timestamp,
+                                tr101: realtimeData.tr101
+                            };
+                        } else {
+                            console.log(`Using fresh CloudWatch data for ${source.name}: EventBridge not significantly newer`);
+                        }
                     }
-                }
-                return source;
-            });
+                    return source;
+                });
+            } else {
+                console.log(`EventBridge cache is stale (${cacheAge}ms old), using fresh CloudWatch data only`);
+            }
+        } else {
+            console.log('No EventBridge cache available, using fresh CloudWatch data only');
         }
 
         // Determine overall status based on connected sources

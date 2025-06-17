@@ -5,16 +5,14 @@ class StreamingController {
         this.refreshInterval = null;
         this.sessionStartTime = null;
 
-        // Aggressive polling configuration for AWS Console-level performance
+        // Stable polling configuration - balanced performance without API instability
         this.pollingConfig = {
-            normal: 3000,      // 3 seconds normal polling (reduced from 5s)
-            fast: 1000,        // 1 second fast polling during changes
-            burst: 500,        // 0.5 second burst polling for real-time detection
-            realtime: 1000,    // 1 second real-time polling (increased from 200ms for reliability)
-            aggressive: 2000,  // 2 second aggressive polling for sustained monitoring
-            burstDuration: 60000,  // 60 seconds of burst mode (increased)
-            fastDuration: 120000,  // 120 seconds of fast mode (increased)
-            realtimeDuration: 30000, // 30 seconds of real-time mode (increased)
+            normal: 3000,      // 3 seconds normal polling (stable baseline)
+            fast: 2000,        // 2 seconds fast polling during changes
+            burst: 1000,       // 1 second burst polling for change detection
+            aggressive: 2000,  // 2 seconds aggressive polling for sustained monitoring
+            burstDuration: 60000,   // 60 seconds of burst mode
+            fastDuration: 120000,   // 120 seconds of fast mode
             aggressiveDuration: 300000 // 5 minutes of aggressive mode
         };
         this.currentPollingMode = 'normal';
@@ -22,7 +20,6 @@ class StreamingController {
         this.lastCacheTimestamp = null;
         this.burstModeTimeout = null;
         this.fastModeTimeout = null;
-        this.realtimeModeTimeout = null;
         this.aggressiveModeTimeout = null;
         this.stats = {
             totalViewers: 0,
@@ -919,27 +916,13 @@ class StreamingController {
 
         console.log(`🔄 Switching to ${mode} polling mode (${interval}ms interval)`);
 
-        // Set new interval with cache checking for real-time mode
-        this.refreshInterval = setInterval(async () => {
-            // For real-time mode, check cache timestamp first
-            if (mode === 'realtime') {
-                const cacheChanged = await this.checkCacheTimestamp();
-                if (cacheChanged) {
-                    console.log('🚀 EventBridge cache updated, fetching latest data');
-                    this.updateConnectionStatus();
-                    this.updateQuickStatus();
-                } else {
-                    // Cache hasn't changed, just do a lightweight check
-                    console.log('📡 Cache timestamp check - no changes');
-                }
-            } else {
-                // Normal polling for other modes
-                this.updateConnectionStatus();
-                this.updateQuickStatus();
-            }
+        // Set new interval with standard polling for all modes
+        this.refreshInterval = setInterval(() => {
+            this.updateConnectionStatus();
+            this.updateQuickStatus();
         }, interval);
 
-        // Auto-downgrade from burst to aggressive mode
+        // Simplified mode transitions for stability
         if (mode === 'burst') {
             this.burstModeTimeout = setTimeout(() => {
                 console.log('⬇️ Burst mode timeout, switching to aggressive mode');
@@ -947,7 +930,6 @@ class StreamingController {
             }, this.pollingConfig.burstDuration);
         }
 
-        // Auto-downgrade from aggressive to fast mode
         if (mode === 'aggressive') {
             this.aggressiveModeTimeout = setTimeout(() => {
                 console.log('⬇️ Aggressive mode timeout, switching to fast mode');
@@ -955,15 +937,6 @@ class StreamingController {
             }, this.pollingConfig.aggressiveDuration);
         }
 
-        // Auto-downgrade from realtime to aggressive mode
-        if (mode === 'realtime') {
-            this.realtimeModeTimeout = setTimeout(() => {
-                console.log('⬇️ Real-time mode timeout, switching to aggressive mode');
-                this.setPollingMode('aggressive');
-            }, this.pollingConfig.realtimeDuration);
-        }
-
-        // Auto-downgrade from fast to normal mode
         if (mode === 'fast') {
             this.fastModeTimeout = setTimeout(() => {
                 console.log('⬇️ Fast mode timeout, switching to normal mode');
@@ -1005,7 +978,7 @@ class StreamingController {
 
         // Trigger burst mode on source changes
         if (hasChanges) {
-            console.log('🚀 Source changes detected, activating burst mode for real-time updates');
+            console.log('🚀 Source changes detected, activating burst mode for faster updates');
             this.setPollingMode('burst');
         } else if (this.currentPollingMode === 'normal') {
             // Periodically switch to aggressive mode to catch missed changes
@@ -1045,6 +1018,31 @@ class StreamingController {
             console.error('Error checking cache timestamp:', error);
             return false;
         }
+    }
+
+    forceRefresh() {
+        console.log('🔄 Manual refresh triggered - switching to burst mode');
+
+        // Show visual feedback
+        const refreshBtn = document.getElementById('manual-refresh-btn');
+        if (refreshBtn) {
+            refreshBtn.style.transform = 'rotate(360deg)';
+            refreshBtn.style.transition = 'transform 0.5s';
+            setTimeout(() => {
+                refreshBtn.style.transform = '';
+                refreshBtn.style.transition = 'transform 0.2s';
+            }, 500);
+        }
+
+        // Force burst mode for faster detection
+        this.setPollingMode('burst');
+
+        // Immediately trigger an update
+        this.updateConnectionStatus();
+        this.updateQuickStatus();
+
+        // Show notification
+        this.showNotification('🔄 Forcing refresh - checking for source changes...', 'info');
     }
 
     stopAutoRefresh() {
