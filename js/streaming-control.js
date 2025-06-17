@@ -5,15 +5,17 @@ class StreamingController {
         this.refreshInterval = null;
         this.sessionStartTime = null;
 
-        // Adaptive polling configuration
+        // Aggressive polling configuration for AWS Console-level performance
         this.pollingConfig = {
-            normal: 5000,      // 5 seconds normal polling
+            normal: 3000,      // 3 seconds normal polling (reduced from 5s)
             fast: 1000,        // 1 second fast polling during changes
             burst: 500,        // 0.5 second burst polling for real-time detection
-            realtime: 200,     // 0.2 second real-time polling for EventBridge cache
-            burstDuration: 30000, // 30 seconds of burst mode
-            fastDuration: 60000,  // 60 seconds of fast mode
-            realtimeDuration: 10000 // 10 seconds of real-time mode
+            realtime: 1000,    // 1 second real-time polling (increased from 200ms for reliability)
+            aggressive: 2000,  // 2 second aggressive polling for sustained monitoring
+            burstDuration: 60000,  // 60 seconds of burst mode (increased)
+            fastDuration: 120000,  // 120 seconds of fast mode (increased)
+            realtimeDuration: 30000, // 30 seconds of real-time mode (increased)
+            aggressiveDuration: 300000 // 5 minutes of aggressive mode
         };
         this.currentPollingMode = 'normal';
         this.lastSourceStates = new Map();
@@ -21,6 +23,7 @@ class StreamingController {
         this.burstModeTimeout = null;
         this.fastModeTimeout = null;
         this.realtimeModeTimeout = null;
+        this.aggressiveModeTimeout = null;
         this.stats = {
             totalViewers: 0,
             peakViewers: 0,
@@ -222,12 +225,15 @@ class StreamingController {
 
     async updateMediaConnectStatus() {
         try {
+            // Add cache-busting parameter to prevent stale responses
+            const cacheBuster = Date.now();
+
             // Fetch flow status, input health, and dual source information
             const [flowResponse, healthResponse, sourcesResponse, failoverResponse] = await Promise.all([
-                fetch(`${this.apiBaseUrl}/mediaconnect/flow/status`),
-                fetch(`${this.apiBaseUrl}/mediaconnect/inputs/health`),
-                fetch(`${this.apiBaseUrl}/mediaconnect/sources/health`),
-                fetch(`${this.apiBaseUrl}/mediaconnect/failover/status`)
+                fetch(`${this.apiBaseUrl}/mediaconnect/flow/status?t=${cacheBuster}`),
+                fetch(`${this.apiBaseUrl}/mediaconnect/inputs/health?t=${cacheBuster}`),
+                fetch(`${this.apiBaseUrl}/mediaconnect/sources/health?t=${cacheBuster}`),
+                fetch(`${this.apiBaseUrl}/mediaconnect/failover/status?t=${cacheBuster}`)
             ]);
 
             const flowData = await flowResponse.json();
@@ -899,6 +905,14 @@ class StreamingController {
             clearTimeout(this.fastModeTimeout);
             this.fastModeTimeout = null;
         }
+        if (this.realtimeModeTimeout) {
+            clearTimeout(this.realtimeModeTimeout);
+            this.realtimeModeTimeout = null;
+        }
+        if (this.aggressiveModeTimeout) {
+            clearTimeout(this.aggressiveModeTimeout);
+            this.aggressiveModeTimeout = null;
+        }
 
         this.currentPollingMode = mode;
         const interval = this.pollingConfig[mode];
@@ -925,19 +939,27 @@ class StreamingController {
             }
         }, interval);
 
-        // Auto-downgrade from burst to realtime mode
+        // Auto-downgrade from burst to aggressive mode
         if (mode === 'burst') {
             this.burstModeTimeout = setTimeout(() => {
-                console.log('⬇️ Burst mode timeout, switching to real-time mode');
-                this.setPollingMode('realtime');
+                console.log('⬇️ Burst mode timeout, switching to aggressive mode');
+                this.setPollingMode('aggressive');
             }, this.pollingConfig.burstDuration);
         }
 
-        // Auto-downgrade from realtime to fast mode
+        // Auto-downgrade from aggressive to fast mode
+        if (mode === 'aggressive') {
+            this.aggressiveModeTimeout = setTimeout(() => {
+                console.log('⬇️ Aggressive mode timeout, switching to fast mode');
+                this.setPollingMode('fast');
+            }, this.pollingConfig.aggressiveDuration);
+        }
+
+        // Auto-downgrade from realtime to aggressive mode
         if (mode === 'realtime') {
             this.realtimeModeTimeout = setTimeout(() => {
-                console.log('⬇️ Real-time mode timeout, switching to fast mode');
-                this.setPollingMode('fast');
+                console.log('⬇️ Real-time mode timeout, switching to aggressive mode');
+                this.setPollingMode('aggressive');
             }, this.pollingConfig.realtimeDuration);
         }
 
@@ -976,10 +998,22 @@ class StreamingController {
             this.lastSourceStates.set(sourceId, currentStatus);
         });
 
+        // Update last change time
+        if (hasChanges) {
+            this.lastChangeTime = Date.now();
+        }
+
         // Trigger burst mode on source changes
-        if (hasChanges && this.currentPollingMode === 'normal') {
+        if (hasChanges) {
             console.log('🚀 Source changes detected, activating burst mode for real-time updates');
             this.setPollingMode('burst');
+        } else if (this.currentPollingMode === 'normal') {
+            // Periodically switch to aggressive mode to catch missed changes
+            const timeSinceLastChange = Date.now() - (this.lastChangeTime || 0);
+            if (timeSinceLastChange > 120000) { // 2 minutes since last change
+                console.log('🔍 No recent changes detected, switching to aggressive mode for monitoring');
+                this.setPollingMode('aggressive');
+            }
         }
 
         return hasChanges;
@@ -987,7 +1021,9 @@ class StreamingController {
 
     async checkCacheTimestamp() {
         try {
-            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/sources/health/timestamp`);
+            // Add cache-busting parameter to prevent stale responses
+            const cacheBuster = Date.now();
+            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/sources/health/timestamp?t=${cacheBuster}`);
             const data = await response.json();
 
             if (data.status === 'success' && data.cache_available) {
