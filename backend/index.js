@@ -28,6 +28,10 @@ const multiChannelManager = new RobustMultiChannelManager();
 let latestSourceHealth = null;
 let sourceHealthSubscribers = new Set();
 
+// SSE connection management
+let sseConnections = new Map(); // connectionId -> response object
+let connectionCounter = 0;
+
 // Configuration
 const CONFIG = {
     region: 'us-west-2',
@@ -1524,6 +1528,21 @@ exports.handler = async (event) => {
             return await getAdminPresets();
         }
 
+        // Real-time SSE endpoint for source health updates
+        if (path === '/api/mediaconnect/sources/health/stream' && httpMethod === 'GET') {
+            return await handleSSEConnection(event);
+        }
+
+        // Quick cache check endpoint for real-time polling optimization
+        if (path === '/api/mediaconnect/sources/health/timestamp' && httpMethod === 'GET') {
+            return createResponse(200, {
+                status: 'success',
+                cache_available: !!latestSourceHealth,
+                last_updated: latestSourceHealth?.last_updated || null,
+                timestamp: new Date().toISOString()
+            });
+        }
+
         // Default response for unmatched routes
         return createResponse(404, {
             status: 'error',
@@ -1535,6 +1554,71 @@ exports.handler = async (event) => {
     } catch (error) {
         return handleError(error, 'Request processing failed');
     }
+};
+
+// Server-Sent Events handler for real-time source health updates
+const handleSSEConnection = async (event) => {
+    try {
+        const connectionId = ++connectionCounter;
+        console.log(`SSE connection established: ${connectionId}`);
+
+        // SSE response headers
+        const headers = {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Cache-Control'
+        };
+
+        // For Lambda Function URLs, we can't maintain persistent connections
+        // Instead, we'll return the current state and let frontend reconnect
+        const currentData = {
+            connectionId,
+            timestamp: new Date().toISOString(),
+            latestSourceHealth: latestSourceHealth || {},
+            message: 'SSE connection established - use polling with EventBridge cache'
+        };
+
+        // Format as SSE
+        const sseData = `data: ${JSON.stringify(currentData)}\n\n`;
+
+        return {
+            statusCode: 200,
+            headers,
+            body: sseData
+        };
+
+    } catch (error) {
+        console.error('Error handling SSE connection:', error);
+        return {
+            statusCode: 500,
+            headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            body: JSON.stringify({
+                status: 'error',
+                message: 'Failed to establish SSE connection',
+                error: error.message
+            })
+        };
+    }
+};
+
+// Broadcast source health updates to all SSE connections
+const broadcastSourceHealthUpdate = (sourceUpdate) => {
+    const message = {
+        type: 'source-health-update',
+        timestamp: new Date().toISOString(),
+        data: sourceUpdate
+    };
+
+    console.log(`Broadcasting source health update to ${sseConnections.size} connections:`, message);
+
+    // Note: In Lambda Function URL environment, we can't maintain persistent connections
+    // This function is prepared for future WebSocket implementation
+    // For now, we rely on the EventBridge cache + optimized polling
 };
 
 // EventBridge handler for real-time MediaConnect source health events
@@ -1590,6 +1674,9 @@ const handleEventBridgeEvent = async (event) => {
                 };
 
                 console.log('Source health cache updated:', sourceHealthUpdate);
+
+                // Broadcast to SSE connections
+                broadcastSourceHealthUpdate(sourceHealthUpdate);
 
                 // Notify any subscribers (for future WebSocket/SSE implementation)
                 sourceHealthSubscribers.forEach(subscriber => {

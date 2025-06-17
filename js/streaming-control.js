@@ -10,13 +10,17 @@ class StreamingController {
             normal: 5000,      // 5 seconds normal polling
             fast: 1000,        // 1 second fast polling during changes
             burst: 500,        // 0.5 second burst polling for real-time detection
+            realtime: 200,     // 0.2 second real-time polling for EventBridge cache
             burstDuration: 30000, // 30 seconds of burst mode
-            fastDuration: 60000   // 60 seconds of fast mode
+            fastDuration: 60000,  // 60 seconds of fast mode
+            realtimeDuration: 10000 // 10 seconds of real-time mode
         };
         this.currentPollingMode = 'normal';
         this.lastSourceStates = new Map();
+        this.lastCacheTimestamp = null;
         this.burstModeTimeout = null;
         this.fastModeTimeout = null;
+        this.realtimeModeTimeout = null;
         this.stats = {
             totalViewers: 0,
             peakViewers: 0,
@@ -901,18 +905,40 @@ class StreamingController {
 
         console.log(`🔄 Switching to ${mode} polling mode (${interval}ms interval)`);
 
-        // Set new interval
-        this.refreshInterval = setInterval(() => {
-            this.updateConnectionStatus();
-            this.updateQuickStatus();
+        // Set new interval with cache checking for real-time mode
+        this.refreshInterval = setInterval(async () => {
+            // For real-time mode, check cache timestamp first
+            if (mode === 'realtime') {
+                const cacheChanged = await this.checkCacheTimestamp();
+                if (cacheChanged) {
+                    console.log('🚀 EventBridge cache updated, fetching latest data');
+                    this.updateConnectionStatus();
+                    this.updateQuickStatus();
+                } else {
+                    // Cache hasn't changed, just do a lightweight check
+                    console.log('📡 Cache timestamp check - no changes');
+                }
+            } else {
+                // Normal polling for other modes
+                this.updateConnectionStatus();
+                this.updateQuickStatus();
+            }
         }, interval);
 
-        // Auto-downgrade from burst to fast mode
+        // Auto-downgrade from burst to realtime mode
         if (mode === 'burst') {
             this.burstModeTimeout = setTimeout(() => {
-                console.log('⬇️ Burst mode timeout, switching to fast mode');
-                this.setPollingMode('fast');
+                console.log('⬇️ Burst mode timeout, switching to real-time mode');
+                this.setPollingMode('realtime');
             }, this.pollingConfig.burstDuration);
+        }
+
+        // Auto-downgrade from realtime to fast mode
+        if (mode === 'realtime') {
+            this.realtimeModeTimeout = setTimeout(() => {
+                console.log('⬇️ Real-time mode timeout, switching to fast mode');
+                this.setPollingMode('fast');
+            }, this.pollingConfig.realtimeDuration);
         }
 
         // Auto-downgrade from fast to normal mode
@@ -957,6 +983,32 @@ class StreamingController {
         }
 
         return hasChanges;
+    }
+
+    async checkCacheTimestamp() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/sources/health/timestamp`);
+            const data = await response.json();
+
+            if (data.status === 'success' && data.cache_available) {
+                const currentTimestamp = data.last_updated;
+
+                if (this.lastCacheTimestamp && currentTimestamp !== this.lastCacheTimestamp) {
+                    console.log(`🔄 Cache timestamp changed: ${this.lastCacheTimestamp} → ${currentTimestamp}`);
+                    this.lastCacheTimestamp = currentTimestamp;
+                    return true; // Cache has been updated
+                }
+
+                if (!this.lastCacheTimestamp) {
+                    this.lastCacheTimestamp = currentTimestamp;
+                }
+            }
+
+            return false; // No cache changes
+        } catch (error) {
+            console.error('Error checking cache timestamp:', error);
+            return false;
+        }
     }
 
     stopAutoRefresh() {
