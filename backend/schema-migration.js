@@ -1,7 +1,10 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, ScanCommand, GetCommand, PutCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+const { CreateBackupCommand } = require('@aws-sdk/client-dynamodb');
 const { DEFAULT_PRESETS } = require('./default-presets');
 
-const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'us-west-2' });
+const dynamodbClient = new DynamoDBClient({ region: 'us-west-2' });
+const dynamodb = DynamoDBDocumentClient.from(dynamodbClient);
 
 class SchemaMigration {
     constructor() {
@@ -19,7 +22,7 @@ class SchemaMigration {
                 TableName: this.destinationsTable
             };
 
-            const result = await dynamodb.scan(scanParams).promise();
+            const result = await dynamodb.send(new ScanCommand(scanParams));
             const destinations = result.Items || [];
 
             console.log(`Found ${destinations.length} destinations to migrate`);
@@ -88,7 +91,7 @@ class SchemaMigration {
                 ExpressionAttributeValues: this.buildAttributeValues(updates)
             };
 
-            await dynamodb.update(updateParams).promise();
+            await dynamodb.send(new UpdateCommand(updateParams));
             console.log(`Migrated destination: ${destination.destination_id} (${destination.platform})`);
         }
     }
@@ -104,7 +107,7 @@ class SchemaMigration {
                     Key: { preset_id: preset.preset_id }
                 };
 
-                const existingPreset = await dynamodb.get(getParams).promise();
+                const existingPreset = await dynamodb.send(new GetCommand(getParams));
                 
                 if (!existingPreset.Item) {
                     // Insert new preset
@@ -113,7 +116,7 @@ class SchemaMigration {
                         Item: preset
                     };
 
-                    await dynamodb.put(putParams).promise();
+                    await dynamodb.send(new PutCommand(putParams));
                     console.log(`Added preset: ${preset.preset_id} (${preset.name})`);
                 } else {
                     console.log(`Preset already exists: ${preset.preset_id}`);
@@ -191,8 +194,7 @@ class SchemaMigration {
                 BackupName: `${tableName}-migration-backup-${Date.now()}`
             };
 
-            const dynamodbService = new AWS.DynamoDB({ region: 'us-west-2' });
-            const backup = await dynamodbService.createBackup(backupParams).promise();
+            const backup = await dynamodbClient.send(new CreateBackupCommand(backupParams));
             console.log(`Created backup for ${tableName}: ${backup.BackupDetails.BackupArn}`);
             return backup.BackupDetails.BackupArn;
 

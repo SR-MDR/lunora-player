@@ -1,7 +1,10 @@
-const AWS = require('aws-sdk');
-const medialive = new AWS.MediaLive({ region: 'us-west-2' });
-const mediaconnect = new AWS.MediaConnect({ region: 'us-west-2' });
-const cloudwatch = new AWS.CloudWatch({ region: 'us-west-2' });
+const { MediaLiveClient, StartChannelCommand, StopChannelCommand, DescribeChannelCommand } = require('@aws-sdk/client-medialive');
+const { MediaConnectClient, DescribeFlowCommand, StartFlowCommand, StopFlowCommand, AddFlowSourcesCommand, UpdateFlowCommand } = require('@aws-sdk/client-mediaconnect');
+const { CloudWatchClient, PutMetricDataCommand } = require('@aws-sdk/client-cloudwatch');
+
+const medialive = new MediaLiveClient({ region: 'us-west-2' });
+const mediaconnect = new MediaConnectClient({ region: 'us-west-2' });
+const cloudwatch = new CloudWatchClient({ region: 'us-west-2' });
 
 class RobustMultiChannelManager {
     constructor() {
@@ -54,7 +57,7 @@ class RobustMultiChannelManager {
             }
 
             const params = { ChannelId: channelId };
-            const result = await medialive.startChannel(params).promise();
+            const result = await medialive.send(new StartChannelCommand(params));
 
             // Log metrics
             await this.logChannelMetric(channelId, 'ChannelStart', 1);
@@ -102,7 +105,7 @@ class RobustMultiChannelManager {
             }
 
             const params = { ChannelId: channelId };
-            const result = await medialive.stopChannel(params).promise();
+            const result = await medialive.send(new StopChannelCommand(params));
 
             // Log metrics
             await this.logChannelMetric(channelId, 'ChannelStop', 1);
@@ -121,7 +124,7 @@ class RobustMultiChannelManager {
     async getChannelState(channelId) {
         try {
             const params = { ChannelId: channelId };
-            const result = await medialive.describeChannel(params).promise();
+            const result = await medialive.send(new DescribeChannelCommand(params));
             return result.State;
         } catch (error) {
             console.error(`Error getting channel state for ${channelId}:`, error);
@@ -139,7 +142,7 @@ class RobustMultiChannelManager {
             }
 
             const params = { FlowArn: this.mediaConnectFlowArn };
-            const result = await mediaconnect.describeFlow(params).promise();
+            const result = await mediaconnect.send(new DescribeFlowCommand(params));
 
             return {
                 status: result.Flow.Status || 'UNKNOWN',
@@ -168,7 +171,7 @@ class RobustMultiChannelManager {
             }
 
             const params = { FlowArn: this.mediaConnectFlowArn };
-            await mediaconnect.startFlow(params).promise();
+            await mediaconnect.send(new StartFlowCommand(params));
 
             return {
                 status: 'success',
@@ -188,7 +191,7 @@ class RobustMultiChannelManager {
             }
 
             const params = { FlowArn: this.mediaConnectFlowArn };
-            await mediaconnect.stopFlow(params).promise();
+            await mediaconnect.send(new StopFlowCommand(params));
 
             return {
                 status: 'success',
@@ -258,7 +261,7 @@ class RobustMultiChannelManager {
                 }]
             };
 
-            await cloudwatch.putMetricData(params).promise();
+            await cloudwatch.send(new PutMetricDataCommand(params));
         } catch (error) {
             console.error('Error logging metric:', error);
             // Don't throw - metrics are non-critical
@@ -279,7 +282,7 @@ class RobustMultiChannelManager {
 
             try {
                 const params = { ChannelId: channelId };
-                const result = await medialive.describeChannel(params).promise();
+                const result = await medialive.send(new DescribeChannelCommand(params));
 
                 return {
                     platform,
@@ -324,7 +327,7 @@ class RobustMultiChannelManager {
 
             try {
                 const params = { ChannelId: channelId };
-                const result = await medialive.describeChannel(params).promise();
+                const result = await medialive.send(new DescribeChannelCommand(params));
 
                 validation.channels[platform] = {
                     channelId,
@@ -373,7 +376,7 @@ class RobustMultiChannelManager {
 
             // Get detailed flow information including source health
             const params = { FlowArn: this.mediaConnectFlowArn };
-            const result = await mediaconnect.describeFlow(params).promise();
+            const result = await mediaconnect.send(new DescribeFlowCommand(params));
 
             // Handle both single source (legacy) and dual source configurations
             const sources = result.Flow.Sources || (result.Flow.Source ? [result.Flow.Source] : []);
@@ -466,7 +469,7 @@ class RobustMultiChannelManager {
             }
 
             const params = { FlowArn: this.mediaConnectFlowArn };
-            const result = await mediaconnect.describeFlow(params).promise();
+            const result = await mediaconnect.send(new DescribeFlowCommand(params));
 
             // Handle both single source (legacy) and dual source configurations
             const sources = result.Flow.Sources || (result.Flow.Source ? [result.Flow.Source] : []);
@@ -535,7 +538,7 @@ class RobustMultiChannelManager {
                 Sources: [backupSource]
             };
 
-            const result = await mediaconnect.addFlowSources(params).promise();
+            const result = await mediaconnect.send(new AddFlowSourcesCommand(params));
 
             return {
                 status: 'success',
@@ -569,7 +572,7 @@ class RobustMultiChannelManager {
                 SourceFailoverConfig: sourceFailoverConfig
             };
 
-            const result = await mediaconnect.updateFlow(params).promise();
+            const result = await mediaconnect.send(new UpdateFlowCommand(params));
 
             return {
                 status: 'success',
@@ -590,7 +593,7 @@ class RobustMultiChannelManager {
             }
 
             const params = { FlowArn: this.mediaConnectFlowArn };
-            const result = await mediaconnect.describeFlow(params).promise();
+            const result = await mediaconnect.send(new DescribeFlowCommand(params));
 
             const sources = result.Flow.Sources || (result.Flow.Source ? [result.Flow.Source] : []);
             const failoverConfig = result.Flow.SourceFailoverConfig;

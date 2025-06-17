@@ -1,19 +1,25 @@
 // Lunora Player - Lambda Handler for Multi-Destination Streaming API
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, ScanCommand, GetCommand, PutCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { SSMClient, GetParameterCommand, PutParameterCommand, DeleteParameterCommand } = require('@aws-sdk/client-ssm');
+const { MediaLiveClient, DescribeChannelCommand, ListChannelsCommand, StartChannelCommand, StopChannelCommand } = require('@aws-sdk/client-medialive');
+const { S3Client, GetBucketLocationCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
+const { MediaPackageClient, DescribeChannelCommand: MediaPackageDescribeChannelCommand, ListOriginEndpointsCommand } = require('@aws-sdk/client-mediapackage');
+const { CloudFrontClient, ListDistributionsCommand } = require('@aws-sdk/client-cloudfront');
+
 const RobustMultiChannelManager = require('./multi-channel-manager-robust');
 const SchemaMigration = require('./schema-migration');
 
 // AWS Configuration
-AWS.config.update({
-    region: 'us-west-2'
-});
+const region = 'us-west-2';
 
-const dynamodb = new AWS.DynamoDB.DocumentClient();
-const ssm = new AWS.SSM();
-const medialive = new AWS.MediaLive();
-const s3 = new AWS.S3();
-const mediapackage = new AWS.MediaPackage();
-const cloudfront = new AWS.CloudFront();
+const dynamodbClient = new DynamoDBClient({ region });
+const dynamodb = DynamoDBDocumentClient.from(dynamodbClient);
+const ssm = new SSMClient({ region });
+const medialive = new MediaLiveClient({ region });
+const s3 = new S3Client({ region });
+const mediapackage = new MediaPackageClient({ region });
+const cloudfront = new CloudFrontClient({ region });
 
 // Initialize multi-channel manager
 const multiChannelManager = new RobustMultiChannelManager();
@@ -59,10 +65,10 @@ const getStreamKey = async (streamKeyParam) => {
     }
 
     try {
-        const result = await ssm.getParameter({
+        const result = await ssm.send(new GetParameterCommand({
             Name: streamKeyParam,
             WithDecryption: true
-        }).promise();
+        }));
 
         return result.Parameter.Value;
     } catch (error) {
@@ -74,9 +80,9 @@ const getStreamKey = async (streamKeyParam) => {
 // Helper function to get MediaLive channel details
 const getMediaLiveChannel = async () => {
     try {
-        const result = await medialive.describeChannel({
+        const result = await medialive.send(new DescribeChannelCommand({
             ChannelId: CONFIG.medialive.channelId
-        }).promise();
+        }));
 
         return result;
     } catch (error) {
@@ -88,13 +94,13 @@ const getMediaLiveChannel = async () => {
 // Helper function to count active streaming destinations
 const getActiveDestinationsCount = async () => {
     try {
-        const result = await dynamodb.scan({
+        const result = await dynamodb.send(new ScanCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             FilterExpression: 'streaming_status = :status',
             ExpressionAttributeValues: {
                 ':status': 'streaming'
             }
-        }).promise();
+        }));
 
         return result.Items.length;
     } catch (error) {
@@ -132,9 +138,9 @@ const waitForChannelState = async (targetState, timeoutSeconds = 60) => {
 // Get all destinations
 const getDestinations = async () => {
     try {
-        const result = await dynamodb.scan({
+        const result = await dynamodb.send(new ScanCommand({
             TableName: CONFIG.dynamodb.destinationsTable
-        }).promise();
+        }));
 
         // Don't include actual stream keys in the response for security
         const destinations = result.Items.map(item => ({
@@ -172,13 +178,13 @@ const createDestination = async (body) => {
         let stream_key_param = null;
         if (stream_key) {
             stream_key_param = `${CONFIG.parameterStore.prefix}/destinations/${destination_id}/stream_key`;
-            await ssm.putParameter({
+            await ssm.send(new PutParameterCommand({
                 Name: stream_key_param,
                 Value: stream_key,
                 Type: 'SecureString',
                 Description: `Stream key for destination ${name}`,
                 Overwrite: true
-            }).promise();
+            }));
         }
 
         const destination = {
@@ -194,10 +200,10 @@ const createDestination = async (body) => {
             updated_at: timestamp
         };
 
-        await dynamodb.put({
+        await dynamodb.send(new PutCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             Item: destination
-        }).promise();
+        }));
 
         // Return destination without sensitive data
         const responseDestination = {
@@ -222,10 +228,10 @@ const updateDestination = async (destinationId, body) => {
         const { name, platform, rtmp_url, stream_key, preset_id, enabled } = JSON.parse(body);
 
         // Get existing destination
-        const existing = await dynamodb.get({
+        const existing = await dynamodb.send(new GetCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId }
-        }).promise();
+        }));
 
         if (!existing.Item) {
             return createResponse(404, {
@@ -253,22 +259,22 @@ const updateDestination = async (destinationId, body) => {
                 const stream_key_param = existing.Item.stream_key_param || 
                     `${CONFIG.parameterStore.prefix}/destinations/${destinationId}/stream_key`;
                 
-                await ssm.putParameter({
+                await ssm.send(new PutParameterCommand({
                     Name: stream_key_param,
                     Value: stream_key,
                     Type: 'SecureString',
                     Description: `Stream key for destination ${name || existing.Item.name}`,
                     Overwrite: true
-                }).promise();
+                }));
 
                 updates.stream_key_param = stream_key_param;
             } else {
                 // Remove stream key
                 if (existing.Item.stream_key_param) {
                     try {
-                        await ssm.deleteParameter({
+                        await ssm.send(new DeleteParameterCommand({
                             Name: existing.Item.stream_key_param
-                        }).promise();
+                        }));
                     } catch (e) {
                         console.warn('Failed to delete parameter:', e.message);
                     }
@@ -288,19 +294,19 @@ const updateDestination = async (destinationId, body) => {
             return acc;
         }, {});
 
-        await dynamodb.update({
+        await dynamodb.send(new UpdateCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId },
             UpdateExpression: updateExpression,
             ExpressionAttributeNames: expressionAttributeNames,
             ExpressionAttributeValues: expressionAttributeValues
-        }).promise();
+        }));
 
         // Get updated destination
-        const updated = await dynamodb.get({
+        const updated = await dynamodb.send(new GetCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId }
-        }).promise();
+        }));
 
         // Return destination without sensitive data
         const responseDestination = {
@@ -323,10 +329,10 @@ const updateDestination = async (destinationId, body) => {
 const deleteDestination = async (destinationId) => {
     try {
         // Get existing destination
-        const existing = await dynamodb.get({
+        const existing = await dynamodb.send(new GetCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId }
-        }).promise();
+        }));
 
         if (!existing.Item) {
             return createResponse(404, {
@@ -338,19 +344,19 @@ const deleteDestination = async (destinationId) => {
         // Delete stream key from Parameter Store if it exists
         if (existing.Item.stream_key_param) {
             try {
-                await ssm.deleteParameter({
+                await ssm.send(new DeleteParameterCommand({
                     Name: existing.Item.stream_key_param
-                }).promise();
+                }));
             } catch (e) {
                 console.warn('Failed to delete parameter:', e.message);
             }
         }
 
         // Delete destination from DynamoDB
-        await dynamodb.delete({
+        await dynamodb.send(new DeleteCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId }
-        }).promise();
+        }));
 
         return createResponse(200, {
             status: 'success',
@@ -364,9 +370,9 @@ const deleteDestination = async (destinationId) => {
 // Get presets
 const getPresets = async () => {
     try {
-        const result = await dynamodb.scan({
+        const result = await dynamodb.send(new ScanCommand({
             TableName: CONFIG.dynamodb.presetsTable
-        }).promise();
+        }));
 
         return createResponse(200, {
             status: 'success',
@@ -382,13 +388,13 @@ const getPresets = async () => {
 const getStreamingStatus = async () => {
     try {
         // Get MediaLive channels
-        const channels = await medialive.listChannels().promise();
+        const channels = await medialive.send(new ListChannelsCommand({}));
         const activeChannels = channels.Channels.filter(ch => ch.State === 'RUNNING');
 
         // Get all destinations from DynamoDB
-        const destinationsResult = await dynamodb.scan({
+        const destinationsResult = await dynamodb.send(new ScanCommand({
             TableName: CONFIG.dynamodb.destinationsTable
-        }).promise();
+        }));
 
         const streamingDestinations = destinationsResult.Items.filter(d => d.streaming_status === 'streaming');
 
@@ -429,7 +435,7 @@ const startDestination = async (destinationId) => {
             Key: { destination_id: destinationId }
         };
 
-        const result = await dynamodb.get(getParams).promise();
+        const result = await dynamodb.send(new GetCommand(getParams));
 
         if (!result.Item) {
             return createResponse(404, {
@@ -467,7 +473,7 @@ const startDestination = async (destinationId) => {
                 }
             };
 
-            await dynamodb.update(updateParams).promise();
+            await dynamodb.send(new UpdateCommand(updateParams));
 
             return createResponse(200, {
                 status: 'success',
@@ -520,9 +526,9 @@ const startRTMPDestination = async (destinationId, destination) => {
         // Start channel first if needed
         if (shouldStartChannel) {
             console.log('Starting MediaLive channel...');
-            await medialive.startChannel({
+            await medialive.send(new StartChannelCommand({
                 ChannelId: CONFIG.medialive.channelId
-            }).promise();
+            }));
             console.log('MediaLive channel start initiated');
 
             // Wait for channel to be running before adding schedule actions
@@ -565,7 +571,7 @@ const startRTMPDestination = async (destinationId, destination) => {
             }
         };
 
-        await dynamodb.update(updateParams).promise();
+        await dynamodb.send(new UpdateCommand(updateParams));
 
         console.log(`Successfully started streaming to ${destination.platform} destination: ${destination.name}`);
         console.log(`Note: This implementation tracks streaming status. For actual RTMP output, the MediaLive channel needs pre-configured RTMP output groups.`);
@@ -586,7 +592,7 @@ const startRTMPDestination = async (destinationId, destination) => {
 
         // Try to update status to error in database
         try {
-            await dynamodb.update({
+            await dynamodb.send(new UpdateCommand({
                 TableName: CONFIG.dynamodb.destinationsTable,
                 Key: { destination_id: destinationId },
                 UpdateExpression: 'SET streaming_status = :status, updated_at = :timestamp',
@@ -594,7 +600,7 @@ const startRTMPDestination = async (destinationId, destination) => {
                     ':status': 'error',
                     ':timestamp': new Date().toISOString()
                 }
-            }).promise();
+            }));
         } catch (dbError) {
             console.error('Failed to update error status in database:', dbError);
         }
@@ -614,7 +620,7 @@ const stopDestination = async (destinationId) => {
             Key: { destination_id: destinationId }
         };
 
-        const result = await dynamodb.get(getParams).promise();
+        const result = await dynamodb.send(new GetCommand(getParams));
 
         if (!result.Item) {
             return createResponse(404, {
@@ -645,7 +651,7 @@ const stopDestination = async (destinationId) => {
                 }
             };
 
-            await dynamodb.update(updateParams).promise();
+            await dynamodb.send(new UpdateCommand(updateParams));
 
             return createResponse(200, {
                 status: 'success',
@@ -702,14 +708,14 @@ const stopRTMPDestination = async (destinationId, destination) => {
             }
         };
 
-        await dynamodb.update(updateParams).promise();
+        await dynamodb.send(new UpdateCommand(updateParams));
 
         // Only stop the entire channel if no other destinations are active
         if (shouldStopChannel) {
             console.log('Stopping MediaLive channel (no more active destinations)...');
-            await medialive.stopChannel({
+            await medialive.send(new StopChannelCommand({
                 ChannelId: CONFIG.medialive.channelId
-            }).promise();
+            }));
             console.log('MediaLive channel stop initiated');
         }
 
@@ -732,7 +738,7 @@ const stopRTMPDestination = async (destinationId, destination) => {
 
         // Try to update status to error in database
         try {
-            await dynamodb.update({
+            await dynamodb.send(new UpdateCommand({
                 TableName: CONFIG.dynamodb.destinationsTable,
                 Key: { destination_id: destinationId },
                 UpdateExpression: 'SET streaming_status = :status, updated_at = :timestamp',
@@ -740,7 +746,7 @@ const stopRTMPDestination = async (destinationId, destination) => {
                     ':status': 'error',
                     ':timestamp': new Date().toISOString()
                 }
-            }).promise();
+            }));
         } catch (dbError) {
             console.error('Failed to update error status in database:', dbError);
         }
@@ -815,14 +821,14 @@ const getS3Status = async () => {
         const bucketName = 'lunora-player-streaming-prod-372241484305';
 
         // Get bucket location
-        const locationResult = await s3.getBucketLocation({ Bucket: bucketName }).promise();
+        const locationResult = await s3.send(new GetBucketLocationCommand({ Bucket: bucketName }));
         const region = locationResult.LocationConstraint || 'us-east-1';
 
         // Get bucket size and object count (simplified)
-        const listResult = await s3.listObjectsV2({
+        const listResult = await s3.send(new ListObjectsV2Command({
             Bucket: bucketName,
             MaxKeys: 1000
-        }).promise();
+        }));
 
         const objectCount = listResult.KeyCount || 0;
 
@@ -850,10 +856,10 @@ const getMediaPackageStatus = async () => {
         const channelId = 'lunora-player-prod-channel';
 
         // Get channel details
-        const channel = await mediapackage.describeChannel({ Id: channelId }).promise();
+        const channel = await mediapackage.send(new MediaPackageDescribeChannelCommand({ Id: channelId }));
 
         // Get endpoints
-        const endpoints = await mediapackage.listOriginEndpoints({ ChannelId: channelId }).promise();
+        const endpoints = await mediapackage.send(new ListOriginEndpointsCommand({ ChannelId: channelId }));
 
         return createResponse(200, {
             status: 'success',
@@ -881,7 +887,7 @@ const getCloudFrontStatus = async () => {
     try {
 
         // List distributions (simplified)
-        const result = await cloudfront.listDistributions().promise();
+        const result = await cloudfront.send(new ListDistributionsCommand({}));
         const distributions = result.DistributionList.Items || [];
 
         // Filter for Lunora-related distributions
@@ -979,10 +985,10 @@ const getMultiChannelStatus = async () => {
 const startDestinationChannel = async (destinationId) => {
     try {
         // Get destination details
-        const destination = await dynamodb.get({
+        const destination = await dynamodb.send(new GetCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId }
-        }).promise();
+        }));
 
         if (!destination.Item) {
             return createResponse(404, {
@@ -995,7 +1001,7 @@ const startDestinationChannel = async (destinationId) => {
         const result = await multiChannelManager.startDestinationChannel(destinationId, platform);
 
         // Update destination status in database
-        await dynamodb.update({
+        await dynamodb.send(new UpdateCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId },
             UpdateExpression: 'SET channel_status = :status, last_channel_sync = :timestamp',
@@ -1003,7 +1009,7 @@ const startDestinationChannel = async (destinationId) => {
                 ':status': result.status,
                 ':timestamp': new Date().toISOString()
             }
-        }).promise();
+        }));
 
         return createResponse(200, {
             status: 'success',
@@ -1021,10 +1027,10 @@ const startDestinationChannel = async (destinationId) => {
 const stopDestinationChannel = async (destinationId) => {
     try {
         // Get destination details
-        const destination = await dynamodb.get({
+        const destination = await dynamodb.send(new GetCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId }
-        }).promise();
+        }));
 
         if (!destination.Item) {
             return createResponse(404, {
@@ -1037,7 +1043,7 @@ const stopDestinationChannel = async (destinationId) => {
         const result = await multiChannelManager.stopDestinationChannel(destinationId, platform);
 
         // Update destination status in database
-        await dynamodb.update({
+        await dynamodb.send(new UpdateCommand({
             TableName: CONFIG.dynamodb.destinationsTable,
             Key: { destination_id: destinationId },
             UpdateExpression: 'SET channel_status = :status, last_channel_sync = :timestamp',
@@ -1045,7 +1051,7 @@ const stopDestinationChannel = async (destinationId) => {
                 ':status': result.status,
                 ':timestamp': new Date().toISOString()
             }
-        }).promise();
+        }));
 
         return createResponse(200, {
             status: 'success',
@@ -1282,9 +1288,9 @@ const getAdminPlatforms = async () => {
 const getAdminPresets = async () => {
     try {
         // Get all presets with admin details
-        const result = await dynamodb.scan({
+        const result = await dynamodb.send(new ScanCommand({
             TableName: CONFIG.dynamodb.presetsTable
-        }).promise();
+        }));
 
         return createResponse(200, {
             status: 'success',
