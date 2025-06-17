@@ -24,6 +24,10 @@ const cloudfront = new CloudFrontClient({ region });
 // Initialize multi-channel manager
 const multiChannelManager = new RobustMultiChannelManager();
 
+// Store for real-time source health updates
+let latestSourceHealth = null;
+let sourceHealthSubscribers = new Set();
+
 // Configuration
 const CONFIG = {
     region: 'us-west-2',
@@ -1122,14 +1126,42 @@ const getSourcesHealth = async () => {
                     sources: [],
                     failover_config: null,
                     overall_status: 'error',
-                    message: result.message
+                    message: result.message,
+                    realtime_data: latestSourceHealth
                 }
             });
         }
 
+        // Enhance sources with real-time EventBridge data if available
+        let enhancedSources = result.sources || [];
+        if (latestSourceHealth) {
+            enhancedSources = enhancedSources.map(source => {
+                const realtimeData = latestSourceHealth[source.source_arn];
+                if (realtimeData && realtimeData.timestamp) {
+                    // Check if real-time data is more recent than polling data
+                    const realtimeTime = new Date(realtimeData.timestamp);
+                    const pollingTime = new Date(result.last_updated || 0);
+
+                    if (realtimeTime > pollingTime) {
+                        return {
+                            ...source,
+                            status: realtimeData.status,
+                            status_note: `${realtimeData.status_note || realtimeData.detection_method} (Real-time EventBridge)`,
+                            confidence: realtimeData.confidence,
+                            detection_method: realtimeData.detection_method,
+                            realtime_update: true,
+                            realtime_timestamp: realtimeData.timestamp,
+                            tr101: realtimeData.tr101
+                        };
+                    }
+                }
+                return source;
+            });
+        }
+
         // Determine overall status based on connected sources
-        const connectedSources = result.connected_sources || 0;
-        const totalSources = result.total_sources || 0;
+        const connectedSources = enhancedSources.filter(s => s.status === 'connected').length;
+        const totalSources = enhancedSources.length;
         let overallStatus = 'healthy';
 
         if (connectedSources === 0) {
@@ -1142,11 +1174,16 @@ const getSourcesHealth = async () => {
             status: 'success',
             timestamp: new Date().toISOString(),
             sources_health: {
-                sources: result.sources || [],
+                sources: enhancedSources,
                 failover_config: result.failover_config,
                 overall_status: overallStatus,
                 connected_sources: connectedSources,
-                total_sources: totalSources
+                total_sources: totalSources,
+                flow_status: result.flow_status,
+                polling_skipped: result.polling_skipped,
+                detection_method: result.detection_method,
+                realtime_data_available: !!latestSourceHealth,
+                realtime_last_updated: latestSourceHealth?.last_updated
             }
         });
     } catch (error) {
@@ -1315,6 +1352,12 @@ const getAdminPresets = async () => {
 // Main Lambda handler
 exports.handler = async (event) => {
     console.log('Event:', JSON.stringify(event, null, 2));
+
+    // Check if this is an EventBridge event
+    if (event.source === 'aws.mediaconnect' || event.eventType === 'mediaconnect-source-health') {
+        console.log('Detected EventBridge event, routing to EventBridge handler');
+        return await handleEventBridgeEvent(event);
+    }
 
     // Handle different event structures (direct invocation vs function URL)
     let httpMethod, path, pathParameters, body, headers;
@@ -1491,5 +1534,102 @@ exports.handler = async (event) => {
 
     } catch (error) {
         return handleError(error, 'Request processing failed');
+    }
+};
+
+// EventBridge handler for real-time MediaConnect source health events
+const handleEventBridgeEvent = async (event) => {
+    try {
+        console.log('EventBridge event received:', JSON.stringify(event, null, 2));
+
+        // Check if this is a MediaConnect source health event
+        if (event.eventType === 'mediaconnect-source-health' ||
+            (event.source === 'aws.mediaconnect' && event['detail-type'] === 'MediaConnect Source Health')) {
+
+            console.log('Processing MediaConnect source health event');
+
+            // Extract source health information
+            const detail = event.detail || {};
+            const resources = event.resources || [];
+            const timestamp = event.time || new Date().toISOString();
+
+            // Find the source ARN from resources
+            const sourceArn = resources.find(arn => arn.includes(':source:'));
+            const flowArn = resources.find(arn => arn.includes(':flow:'));
+
+            if (sourceArn) {
+                // Extract source name from ARN
+                const sourceName = sourceArn.split(':').pop();
+
+                // Determine connection status from event detail
+                const currentState = detail.current?.state || 'unknown';
+                const previousState = detail.previous?.state || 'unknown';
+                const isConnected = currentState === 'CONNECTED' || currentState === 'RECEIVING';
+
+                console.log(`Source health change detected: ${sourceName} ${previousState} → ${currentState}`);
+
+                // Update latest source health cache
+                const sourceHealthUpdate = {
+                    sourceArn,
+                    sourceName,
+                    status: isConnected ? 'connected' : 'disconnected',
+                    state: currentState,
+                    previousState,
+                    timestamp,
+                    confidence: 'high',
+                    detection_method: 'eventbridge_realtime',
+                    tr101: detail.current?.tr101 || null,
+                    unhealthy: detail.unhealthy || false
+                };
+
+                // Store the update
+                latestSourceHealth = {
+                    ...latestSourceHealth,
+                    [sourceArn]: sourceHealthUpdate,
+                    last_updated: timestamp
+                };
+
+                console.log('Source health cache updated:', sourceHealthUpdate);
+
+                // Notify any subscribers (for future WebSocket/SSE implementation)
+                sourceHealthSubscribers.forEach(subscriber => {
+                    try {
+                        subscriber(sourceHealthUpdate);
+                    } catch (error) {
+                        console.error('Error notifying subscriber:', error);
+                    }
+                });
+
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({
+                        status: 'success',
+                        message: 'Source health event processed',
+                        sourceUpdate: sourceHealthUpdate
+                    })
+                };
+            }
+        }
+
+        // Handle other event types if needed
+        console.log('Event processed but no action taken');
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                status: 'success',
+                message: 'Event received but no action required'
+            })
+        };
+
+    } catch (error) {
+        console.error('Error processing EventBridge event:', error);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({
+                status: 'error',
+                message: 'Failed to process EventBridge event',
+                error: error.message
+            })
+        };
     }
 };

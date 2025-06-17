@@ -4,6 +4,19 @@ class StreamingController {
         this.apiBaseUrl = 'https://rdmgtdz2eu4pj43igkvh6fvaly0xovke.lambda-url.us-west-2.on.aws/api';
         this.refreshInterval = null;
         this.sessionStartTime = null;
+
+        // Adaptive polling configuration
+        this.pollingConfig = {
+            normal: 5000,      // 5 seconds normal polling
+            fast: 1000,        // 1 second fast polling during changes
+            burst: 500,        // 0.5 second burst polling for real-time detection
+            burstDuration: 30000, // 30 seconds of burst mode
+            fastDuration: 60000   // 60 seconds of fast mode
+        };
+        this.currentPollingMode = 'normal';
+        this.lastSourceStates = new Map();
+        this.burstModeTimeout = null;
+        this.fastModeTimeout = null;
         this.stats = {
             totalViewers: 0,
             peakViewers: 0,
@@ -252,6 +265,10 @@ class StreamingController {
 
                 // Update source health details with dual source support
                 this.updateDualSourceHealthDetails(flowData.flow, healthData, sourcesData, failoverData);
+
+                // Detect source changes and trigger adaptive polling
+                const sources = sourcesData?.sources_health?.sources || [];
+                this.detectSourceChanges(sources);
             } else {
                 // Error state
                 if (statusElement) {
@@ -859,11 +876,87 @@ class StreamingController {
     }
 
     startAutoRefresh() {
-        // Refresh status every 5 seconds
+        // Start with normal polling interval
+        this.setPollingMode('normal');
+    }
+
+    setPollingMode(mode) {
+        // Clear existing interval
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+        }
+
+        // Clear existing timeouts
+        if (this.burstModeTimeout) {
+            clearTimeout(this.burstModeTimeout);
+            this.burstModeTimeout = null;
+        }
+        if (this.fastModeTimeout) {
+            clearTimeout(this.fastModeTimeout);
+            this.fastModeTimeout = null;
+        }
+
+        this.currentPollingMode = mode;
+        const interval = this.pollingConfig[mode];
+
+        console.log(`🔄 Switching to ${mode} polling mode (${interval}ms interval)`);
+
+        // Set new interval
         this.refreshInterval = setInterval(() => {
             this.updateConnectionStatus();
             this.updateQuickStatus();
-        }, 5000);
+        }, interval);
+
+        // Auto-downgrade from burst to fast mode
+        if (mode === 'burst') {
+            this.burstModeTimeout = setTimeout(() => {
+                console.log('⬇️ Burst mode timeout, switching to fast mode');
+                this.setPollingMode('fast');
+            }, this.pollingConfig.burstDuration);
+        }
+
+        // Auto-downgrade from fast to normal mode
+        if (mode === 'fast') {
+            this.fastModeTimeout = setTimeout(() => {
+                console.log('⬇️ Fast mode timeout, switching to normal mode');
+                this.setPollingMode('normal');
+            }, this.pollingConfig.fastDuration);
+        }
+    }
+
+    detectSourceChanges(sources) {
+        let hasChanges = false;
+
+        if (!sources || !Array.isArray(sources)) {
+            return hasChanges;
+        }
+
+        sources.forEach(source => {
+            const sourceId = source.source_arn || source.name;
+            const currentStatus = source.status;
+            const previousStatus = this.lastSourceStates.get(sourceId);
+
+            if (previousStatus && previousStatus !== currentStatus) {
+                console.log(`🚨 Source change detected: ${source.name} ${previousStatus} → ${currentStatus}`);
+                hasChanges = true;
+
+                // Show notification for source changes
+                this.showNotification(
+                    `Source ${source.name}: ${previousStatus} → ${currentStatus}`,
+                    currentStatus === 'connected' ? 'success' : 'warning'
+                );
+            }
+
+            this.lastSourceStates.set(sourceId, currentStatus);
+        });
+
+        // Trigger burst mode on source changes
+        if (hasChanges && this.currentPollingMode === 'normal') {
+            console.log('🚀 Source changes detected, activating burst mode for real-time updates');
+            this.setPollingMode('burst');
+        }
+
+        return hasChanges;
     }
 
     stopAutoRefresh() {
