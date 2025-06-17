@@ -1,6 +1,6 @@
 const { MediaLiveClient, StartChannelCommand, StopChannelCommand, DescribeChannelCommand } = require('@aws-sdk/client-medialive');
 const { MediaConnectClient, DescribeFlowCommand, StartFlowCommand, StopFlowCommand, AddFlowSourcesCommand, UpdateFlowCommand } = require('@aws-sdk/client-mediaconnect');
-const { CloudWatchClient, PutMetricDataCommand } = require('@aws-sdk/client-cloudwatch');
+const { CloudWatchClient, PutMetricDataCommand, GetMetricStatisticsCommand } = require('@aws-sdk/client-cloudwatch');
 
 const medialive = new MediaLiveClient({ region: 'us-west-2' });
 const mediaconnect = new MediaConnectClient({ region: 'us-west-2' });
@@ -272,6 +272,90 @@ class RobustMultiChannelManager {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    /**
+     * Get real-time source connection status using CloudWatch SourceConnected metric
+     * This matches the same data that AWS Console displays for source health
+     */
+    async getSourceConnectionStatus(sourceArn) {
+        try {
+            const endTime = new Date();
+            const startTime = new Date(endTime.getTime() - 5 * 60 * 1000); // Last 5 minutes
+
+            const params = {
+                Namespace: 'AWS/MediaConnect',
+                MetricName: 'SourceConnected',
+                Dimensions: [
+                    {
+                        Name: 'SourceARN',
+                        Value: sourceArn
+                    }
+                ],
+                StartTime: startTime,
+                EndTime: endTime,
+                Period: 60, // 1 minute periods
+                Statistics: ['Maximum'] // Use Maximum to get the most recent connection state
+            };
+
+            const result = await cloudwatch.send(new GetMetricStatisticsCommand(params));
+
+            // If we have datapoints, use the most recent one
+            if (result.Datapoints && result.Datapoints.length > 0) {
+                // Sort by timestamp to get the most recent
+                const sortedDatapoints = result.Datapoints.sort((a, b) => b.Timestamp - a.Timestamp);
+                const latestValue = sortedDatapoints[0].Maximum;
+
+                return {
+                    connected: latestValue === 1,
+                    timestamp: sortedDatapoints[0].Timestamp,
+                    value: latestValue
+                };
+            }
+
+            // No recent data points - could mean source was never connected or no recent activity
+            // In this case, we'll fall back to checking if source has basic configuration
+            return {
+                connected: false,
+                timestamp: null,
+                value: 0,
+                note: 'No recent CloudWatch data - source likely disconnected'
+            };
+
+        } catch (error) {
+            console.error(`Error getting CloudWatch metrics for source ${sourceArn}:`, error);
+
+            // If CloudWatch fails, return null to indicate we couldn't determine status
+            return {
+                connected: null,
+                error: error.message,
+                note: 'CloudWatch metrics unavailable'
+            };
+        }
+    }
+
+    /**
+     * Get connection status for multiple sources in parallel
+     */
+    async getMultipleSourceConnectionStatus(sourceArns) {
+        try {
+            const statusPromises = sourceArns.map(async (sourceArn) => {
+                const status = await this.getSourceConnectionStatus(sourceArn);
+                return {
+                    sourceArn,
+                    ...status
+                };
+            });
+
+            return await Promise.all(statusPromises);
+        } catch (error) {
+            console.error('Error getting multiple source connection status:', error);
+            return sourceArns.map(sourceArn => ({
+                sourceArn,
+                connected: null,
+                error: error.message
+            }));
+        }
+    }
+
     async getAllChannelStatuses() {
         const statuses = {};
         const errors = {};
@@ -381,10 +465,44 @@ class RobustMultiChannelManager {
             // Handle both single source (legacy) and dual source configurations
             const sources = result.Flow.Sources || (result.Flow.Source ? [result.Flow.Source] : []);
 
-            // Map sources with proper connection status based on PeerIpAddress
+            // Get real-time connection status from CloudWatch for all sources
+            const sourceArns = sources.map(source => source.SourceArn).filter(arn => arn);
+            const connectionStatuses = await this.getMultipleSourceConnectionStatus(sourceArns);
+
+            // Create a map for quick lookup of connection status by ARN
+            const connectionStatusMap = {};
+            connectionStatuses.forEach(status => {
+                connectionStatusMap[status.sourceArn] = status;
+            });
+
+            // Map sources with CloudWatch-based connection status
             const sourcesWithHealth = sources.map((source, index) => {
-                // Check if source is connected by looking at PeerIpAddress
-                const isConnected = source.PeerIpAddress && source.PeerIpAddress.trim() !== '';
+                const sourceArn = source.SourceArn;
+                const cloudWatchStatus = connectionStatusMap[sourceArn];
+
+                // Determine connection status from CloudWatch data
+                let isConnected = false;
+                let statusNote = '';
+
+                if (cloudWatchStatus) {
+                    if (cloudWatchStatus.connected === true) {
+                        isConnected = true;
+                        statusNote = 'Connected (CloudWatch confirmed)';
+                    } else if (cloudWatchStatus.connected === false) {
+                        isConnected = false;
+                        statusNote = cloudWatchStatus.note || 'Disconnected (CloudWatch confirmed)';
+                    } else {
+                        // CloudWatch data unavailable, fall back to basic checks
+                        const hasPeerIp = source.PeerIpAddress && source.PeerIpAddress.trim() !== '';
+                        isConnected = hasPeerIp;
+                        statusNote = 'CloudWatch unavailable - using fallback detection';
+                    }
+                } else {
+                    // No CloudWatch data, use fallback
+                    const hasPeerIp = source.PeerIpAddress && source.PeerIpAddress.trim() !== '';
+                    isConnected = hasPeerIp;
+                    statusNote = 'No CloudWatch data - using fallback detection';
+                }
 
                 return {
                     name: source.Name || `Source ${index + 1}`,
@@ -394,8 +512,10 @@ class RobustMultiChannelManager {
                     status: isConnected ? 'connected' : 'disconnected',
                     whitelist_cidr: source.WhitelistCidr,
                     peer_ip: source.PeerIpAddress || null,
-                    source_arn: source.SourceArn,
-                    description: source.Description || ''
+                    source_arn: sourceArn,
+                    description: source.Description || '',
+                    status_note: statusNote,
+                    cloudwatch_data: cloudWatchStatus || null
                 };
             });
 
@@ -474,21 +594,48 @@ class RobustMultiChannelManager {
             // Handle both single source (legacy) and dual source configurations
             const sources = result.Flow.Sources || (result.Flow.Source ? [result.Flow.Source] : []);
 
-            // Map sources with proper connection status using multiple indicators
-            const sourcesWithHealth = sources.map((source, index) => {
-                // For SRT sources, check multiple indicators of connection status
-                const hasPeerIp = source.PeerIpAddress && source.PeerIpAddress.trim() !== '';
-                const hasIngestIp = source.IngestIp && source.IngestIp.trim() !== '';
-                const isFlowActive = result.Flow.Status === 'ACTIVE';
+            // Get real-time connection status from CloudWatch for all sources
+            const sourceArns = sources.map(source => source.SourceArn).filter(arn => arn);
+            const connectionStatuses = await this.getMultipleSourceConnectionStatus(sourceArns);
 
-                // Consider a source connected if:
-                // 1. It has a peer IP address (active connection), OR
-                // 2. The flow is active and the source has an ingest IP (ready to receive)
-                const isConnected = hasPeerIp || (isFlowActive && hasIngestIp);
+            // Create a map for quick lookup of connection status by ARN
+            const connectionStatusMap = {};
+            connectionStatuses.forEach(status => {
+                connectionStatusMap[status.sourceArn] = status;
+            });
+
+            // Map sources with CloudWatch-based connection status
+            const sourcesWithHealth = sources.map((source, index) => {
+                const sourceArn = source.SourceArn;
+                const cloudWatchStatus = connectionStatusMap[sourceArn];
+
+                // Determine connection status from CloudWatch data
+                let isConnected = false;
+                let statusNote = '';
+
+                if (cloudWatchStatus) {
+                    if (cloudWatchStatus.connected === true) {
+                        isConnected = true;
+                        statusNote = 'Connected (CloudWatch confirmed)';
+                    } else if (cloudWatchStatus.connected === false) {
+                        isConnected = false;
+                        statusNote = cloudWatchStatus.note || 'Disconnected (CloudWatch confirmed)';
+                    } else {
+                        // CloudWatch data unavailable, fall back to basic checks
+                        const hasPeerIp = source.PeerIpAddress && source.PeerIpAddress.trim() !== '';
+                        isConnected = hasPeerIp;
+                        statusNote = 'CloudWatch unavailable - using fallback detection';
+                    }
+                } else {
+                    // No CloudWatch data, use fallback
+                    const hasPeerIp = source.PeerIpAddress && source.PeerIpAddress.trim() !== '';
+                    isConnected = hasPeerIp;
+                    statusNote = 'No CloudWatch data - using fallback detection';
+                }
 
                 return {
                     name: source.Name || `Source ${index + 1}`,
-                    source_arn: source.SourceArn,
+                    source_arn: sourceArn,
                     protocol: source.Transport?.Protocol || source.Protocol || 'unknown',
                     ingest_ip: source.IngestIp,
                     ingest_port: source.IngestPort,
@@ -497,8 +644,8 @@ class RobustMultiChannelManager {
                     peer_ip: source.PeerIpAddress || null,
                     description: source.Description || '',
                     flow_status: result.Flow.Status,
-                    has_peer_ip: hasPeerIp,
-                    has_ingest_ip: hasIngestIp
+                    status_note: statusNote,
+                    cloudwatch_data: cloudWatchStatus || null
                 };
             });
 
