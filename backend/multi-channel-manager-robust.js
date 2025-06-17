@@ -1,6 +1,6 @@
 const { MediaLiveClient, StartChannelCommand, StopChannelCommand, DescribeChannelCommand } = require('@aws-sdk/client-medialive');
-const { MediaConnectClient, DescribeFlowCommand, StartFlowCommand, StopFlowCommand, AddFlowSourcesCommand, UpdateFlowCommand } = require('@aws-sdk/client-mediaconnect');
-const { CloudWatchClient, PutMetricDataCommand, GetMetricStatisticsCommand } = require('@aws-sdk/client-cloudwatch');
+const { MediaConnectClient, DescribeFlowCommand, StartFlowCommand, StopFlowCommand, AddFlowSourcesCommand, UpdateFlowCommand, DescribeFlowSourceMetadataCommand } = require('@aws-sdk/client-mediaconnect');
+const { CloudWatchClient, PutMetricDataCommand, GetMetricStatisticsCommand, GetMetricDataCommand } = require('@aws-sdk/client-cloudwatch');
 
 const medialive = new MediaLiveClient({ region: 'us-west-2' });
 const mediaconnect = new MediaConnectClient({ region: 'us-west-2' });
@@ -275,11 +275,12 @@ class RobustMultiChannelManager {
     /**
      * Get real-time source connection status using CloudWatch SourceConnected metric
      * This matches the same data that AWS Console displays for source health
+     * Optimized for faster detection with shorter lookback window and periods
      */
     async getSourceConnectionStatus(sourceArn) {
         try {
             const endTime = new Date();
-            const startTime = new Date(endTime.getTime() - 5 * 60 * 1000); // Last 5 minutes
+            const startTime = new Date(endTime.getTime() - 2 * 60 * 1000); // Last 2 minutes (reduced from 5)
 
             const params = {
                 Namespace: 'AWS/MediaConnect',
@@ -292,7 +293,7 @@ class RobustMultiChannelManager {
                 ],
                 StartTime: startTime,
                 EndTime: endTime,
-                Period: 60, // 1 minute periods
+                Period: 60, // 1 minute periods (CloudWatch minimum for MediaConnect)
                 Statistics: ['Maximum'] // Use Maximum to get the most recent connection state
             };
 
@@ -333,10 +334,81 @@ class RobustMultiChannelManager {
     }
 
     /**
-     * Get connection status for multiple sources in parallel
+     * Get connection status for multiple sources using optimized batch query
+     * This is faster than individual queries and reduces API calls
      */
     async getMultipleSourceConnectionStatus(sourceArns) {
         try {
+            if (sourceArns.length === 0) return [];
+
+            // Use GetMetricData for faster batch queries (more efficient than individual GetMetricStatistics)
+            const endTime = new Date();
+            const startTime = new Date(endTime.getTime() - 2 * 60 * 1000); // Last 2 minutes
+
+            const metricDataQueries = sourceArns.map((sourceArn, index) => ({
+                Id: `source_${index}`, // Unique identifier for each query
+                MetricStat: {
+                    Metric: {
+                        Namespace: 'AWS/MediaConnect',
+                        MetricName: 'SourceConnected',
+                        Dimensions: [
+                            {
+                                Name: 'SourceARN',
+                                Value: sourceArn
+                            }
+                        ]
+                    },
+                    Period: 60,
+                    Stat: 'Maximum'
+                },
+                ReturnData: true
+            }));
+
+            const params = {
+                MetricDataQueries: metricDataQueries,
+                StartTime: startTime,
+                EndTime: endTime
+            };
+
+            const result = await cloudwatch.send(new GetMetricDataCommand(params));
+
+            // Process results and map back to source ARNs
+            const statusResults = sourceArns.map((sourceArn, index) => {
+                const metricResult = result.MetricDataResults.find(r => r.Id === `source_${index}`);
+
+                if (metricResult && metricResult.Values && metricResult.Values.length > 0) {
+                    // Get the most recent value
+                    const latestIndex = metricResult.Timestamps.reduce((maxIndex, timestamp, currentIndex) =>
+                        timestamp > metricResult.Timestamps[maxIndex] ? currentIndex : maxIndex, 0);
+
+                    const latestValue = metricResult.Values[latestIndex];
+                    const latestTimestamp = metricResult.Timestamps[latestIndex];
+
+                    return {
+                        sourceArn,
+                        connected: latestValue === 1,
+                        timestamp: latestTimestamp,
+                        value: latestValue
+                    };
+                }
+
+                // No recent data points
+                return {
+                    sourceArn,
+                    connected: false,
+                    timestamp: null,
+                    value: 0,
+                    note: 'No recent CloudWatch data - source likely disconnected'
+                };
+            });
+
+            return statusResults;
+
+        } catch (error) {
+            console.error('Error getting multiple source connection status:', error);
+
+            // Fallback to individual queries if batch fails
+            console.log('Falling back to individual queries...');
             const statusPromises = sourceArns.map(async (sourceArn) => {
                 const status = await this.getSourceConnectionStatus(sourceArn);
                 return {
@@ -346,13 +418,100 @@ class RobustMultiChannelManager {
             });
 
             return await Promise.all(statusPromises);
+        }
+    }
+
+    /**
+     * Get real-time source health using DescribeFlowSourceMetadata API
+     * This provides the most up-to-date information about active sources
+     * Note: Only shows metadata for the currently active source in failover scenarios
+     */
+    async getSourceMetadataHealth() {
+        try {
+            if (!this.mediaConnectFlowArn) {
+                throw new Error('MediaConnect flow ARN not configured');
+            }
+
+            const params = { FlowArn: this.mediaConnectFlowArn };
+            const result = await mediaconnect.send(new DescribeFlowSourceMetadataCommand(params));
+
+            // Check if we have transport media info (indicates active source with data)
+            const hasActiveMedia = result.TransportMediaInfo &&
+                                 result.TransportMediaInfo.Programs &&
+                                 result.TransportMediaInfo.Programs.length > 0;
+
+            return {
+                hasActiveSource: hasActiveMedia,
+                timestamp: result.Timestamp,
+                messages: result.Messages || [],
+                programCount: hasActiveMedia ? result.TransportMediaInfo.Programs.length : 0,
+                transportMediaInfo: result.TransportMediaInfo || null
+            };
+
         } catch (error) {
-            console.error('Error getting multiple source connection status:', error);
-            return sourceArns.map(sourceArn => ({
-                sourceArn,
-                connected: null,
-                error: error.message
-            }));
+            console.error('Error getting source metadata health:', error);
+            return {
+                hasActiveSource: false,
+                error: error.message,
+                timestamp: new Date().toISOString()
+            };
+        }
+    }
+
+    /**
+     * Fast hybrid source health detection combining multiple approaches
+     * Uses DescribeFlowSourceMetadata + optimized CloudWatch for comprehensive status
+     */
+    async getFastSourceHealth(sourceArns) {
+        try {
+            // Run both approaches in parallel for speed
+            const [cloudWatchStatuses, metadataHealth] = await Promise.all([
+                this.getMultipleSourceConnectionStatus(sourceArns),
+                this.getSourceMetadataHealth()
+            ]);
+
+            // Enhance CloudWatch data with metadata insights
+            const enhancedStatuses = cloudWatchStatuses.map(status => {
+                const enhanced = { ...status };
+
+                // Add metadata context
+                enhanced.metadata_available = metadataHealth.hasActiveSource;
+                enhanced.last_metadata_check = metadataHealth.timestamp;
+
+                // If CloudWatch shows connected but no metadata, might be connection issue
+                if (status.connected && !metadataHealth.hasActiveSource) {
+                    enhanced.status_note = 'Connected but no active media detected';
+                    enhanced.confidence = 'medium';
+                } else if (status.connected && metadataHealth.hasActiveSource) {
+                    enhanced.status_note = 'Connected with active media confirmed';
+                    enhanced.confidence = 'high';
+                } else {
+                    enhanced.status_note = status.note || 'Disconnected (CloudWatch confirmed)';
+                    enhanced.confidence = 'high';
+                }
+
+                return enhanced;
+            });
+
+            return {
+                sources: enhancedStatuses,
+                metadata_health: metadataHealth,
+                detection_method: 'hybrid_cloudwatch_metadata',
+                timestamp: new Date().toISOString()
+            };
+
+        } catch (error) {
+            console.error('Error in fast source health detection:', error);
+
+            // Fallback to CloudWatch only
+            const cloudWatchStatuses = await this.getMultipleSourceConnectionStatus(sourceArns);
+            return {
+                sources: cloudWatchStatuses,
+                metadata_health: null,
+                detection_method: 'cloudwatch_fallback',
+                error: error.message,
+                timestamp: new Date().toISOString()
+            };
         }
     }
 
@@ -465,9 +624,10 @@ class RobustMultiChannelManager {
             // Handle both single source (legacy) and dual source configurations
             const sources = result.Flow.Sources || (result.Flow.Source ? [result.Flow.Source] : []);
 
-            // Get real-time connection status from CloudWatch for all sources
+            // Get fast real-time connection status using hybrid approach
             const sourceArns = sources.map(source => source.SourceArn).filter(arn => arn);
-            const connectionStatuses = await this.getMultipleSourceConnectionStatus(sourceArns);
+            const fastHealthResult = await this.getFastSourceHealth(sourceArns);
+            const connectionStatuses = fastHealthResult.sources;
 
             // Create a map for quick lookup of connection status by ARN
             const connectionStatusMap = {};
@@ -594,9 +754,10 @@ class RobustMultiChannelManager {
             // Handle both single source (legacy) and dual source configurations
             const sources = result.Flow.Sources || (result.Flow.Source ? [result.Flow.Source] : []);
 
-            // Get real-time connection status from CloudWatch for all sources
+            // Get fast real-time connection status using hybrid approach
             const sourceArns = sources.map(source => source.SourceArn).filter(arn => arn);
-            const connectionStatuses = await this.getMultipleSourceConnectionStatus(sourceArns);
+            const fastHealthResult = await this.getFastSourceHealth(sourceArns);
+            const connectionStatuses = fastHealthResult.sources;
 
             // Create a map for quick lookup of connection status by ARN
             const connectionStatusMap = {};
@@ -644,7 +805,8 @@ class RobustMultiChannelManager {
                     peer_ip: source.PeerIpAddress || null,
                     description: source.Description || '',
                     flow_status: result.Flow.Status,
-                    status_note: statusNote,
+                    status_note: cloudWatchStatus?.status_note || statusNote,
+                    confidence: cloudWatchStatus?.confidence || 'medium',
                     cloudwatch_data: cloudWatchStatus || null
                 };
             });
@@ -657,6 +819,8 @@ class RobustMultiChannelManager {
                 failover_config: result.Flow.SourceFailoverConfig || null,
                 connected_sources: sourcesWithHealth.filter(s => s.status === 'connected').length,
                 total_sources: sourcesWithHealth.length,
+                detection_method: fastHealthResult.detection_method,
+                metadata_health: fastHealthResult.metadata_health,
                 last_updated: new Date().toISOString()
             };
         } catch (error) {
