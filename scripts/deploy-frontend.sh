@@ -2,6 +2,7 @@
 
 # Lunora Player - Frontend Deployment Script
 # Deploys frontend files to S3 and invalidates CloudFront cache
+# Compatible with AWS SDK v3 backend deployment
 # Usage: Run from project root: ./scripts/deploy-frontend.sh
 
 set -e
@@ -40,9 +41,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 echo "🚀 Starting Lunora Player Frontend Deployment..."
-echo "📁 Project root: $PROJECT_ROOT"
-echo "📁 S3 bucket: $S3_BUCKET"
-echo "📁 CloudFront distribution: $CLOUDFRONT_DISTRIBUTION_ID"
+print_status "Project root: $PROJECT_ROOT"
+print_status "S3 bucket: $S3_BUCKET"
+print_status "CloudFront distribution: $CLOUDFRONT_DISTRIBUTION_ID"
+
+# Verify we're in the right place
+if [ ! -f "$PROJECT_ROOT/streaming.html" ]; then
+    print_error "Frontend files not found. Are you running from the project root?"
+    exit 1
+fi
 
 cd "$PROJECT_ROOT"
 
@@ -57,7 +64,7 @@ fi
 
 # List files to be deployed
 print_status "Files to be deployed:"
-find . -type f \( ! -path "./backend/*" ! -path "./node_modules/*" ! -path "./.git/*" ! -name "*.md" ! -name "*.zip" ! -path "./scripts/*" \) | sort | sed 's/^/  /'
+find . -type f \( ! -path "./backend/*" ! -path "./node_modules/*" ! -path "./.git/*" ! -name "*.md" ! -name "*.zip" ! -path "./scripts/*" ! -name "test-*.js" \) | sort | sed 's/^/  /'
 
 # Deploy to S3
 print_status "Deploying frontend files to S3..."
@@ -70,6 +77,7 @@ aws s3 sync . "s3://$S3_BUCKET/" \
     --exclude "scripts/*" \
     --exclude ".DS_Store" \
     --exclude ".env*" \
+    --exclude "test-*.js" \
     --delete \
     --profile "$PROFILE" \
     --region "$REGION"
@@ -112,7 +120,11 @@ fi
 
 print_success "🎉 Frontend deployment completed!"
 echo ""
-print_status "Frontend URL: https://d35au6zpsr51nc.cloudfront.net/"
+print_status "🔗 Application URLs:"
+print_status "Frontend: https://d35au6zpsr51nc.cloudfront.net/"
 print_status "Streaming Dashboard: https://d35au6zpsr51nc.cloudfront.net/streaming.html"
 print_status "Admin Dashboard: https://d35au6zpsr51nc.cloudfront.net/dashboard.html"
 print_status "Video Player: https://d35au6zpsr51nc.cloudfront.net/index.html"
+echo ""
+print_status "ℹ️  Frontend is compatible with AWS SDK v3 backend"
+print_status "📈 MediaConnect source health monitoring should be improved"
