@@ -5,22 +5,9 @@ class StreamingController {
         this.refreshInterval = null;
         this.sessionStartTime = null;
 
-        // Stable polling configuration - balanced performance without API instability
-        this.pollingConfig = {
-            normal: 3000,      // 3 seconds normal polling (stable baseline)
-            fast: 2000,        // 2 seconds fast polling during changes
-            burst: 1000,       // 1 second burst polling for change detection
-            aggressive: 2000,  // 2 seconds aggressive polling for sustained monitoring
-            burstDuration: 60000,   // 60 seconds of burst mode
-            fastDuration: 120000,   // 120 seconds of fast mode
-            aggressiveDuration: 300000 // 5 minutes of aggressive mode
-        };
-        this.currentPollingMode = 'normal';
+        // Simple consistent polling - high-resolution CloudWatch provides real-time data
+        this.pollingInterval = 5000; // 5 seconds - optimal for high-resolution CloudWatch
         this.lastSourceStates = new Map();
-        this.lastCacheTimestamp = null;
-        this.burstModeTimeout = null;
-        this.fastModeTimeout = null;
-        this.aggressiveModeTimeout = null;
         this.stats = {
             totalViewers: 0,
             peakViewers: 0,
@@ -32,19 +19,15 @@ class StreamingController {
     }
 
     async init() {
-        console.log('Initializing Streaming Controller...');
-        
         // Set up event listeners
         this.bindEvents();
-        
+
         // Initialize status updates
         this.updateConnectionStatus();
         this.updateQuickStatus();
-        
+
         // Start auto-refresh
         this.startAutoRefresh();
-        
-        console.log('Streaming Controller initialized');
     }
 
     // ============================================================================
@@ -85,22 +68,7 @@ class StreamingController {
             mediaConnectStopBtn.addEventListener('click', () => this.stopMediaConnectFlow());
         }
 
-        // Dual Source controls
-        const addBackupBtn = document.getElementById('add-backup-btn');
-        const enableFailoverBtn = document.getElementById('enable-failover-btn');
-        const testFailoverBtn = document.getElementById('test-failover-btn');
-
-        if (addBackupBtn) {
-            addBackupBtn.addEventListener('click', () => this.addBackupSource());
-        }
-
-        if (enableFailoverBtn) {
-            enableFailoverBtn.addEventListener('click', () => this.toggleFailover());
-        }
-
-        if (testFailoverBtn) {
-            testFailoverBtn.addEventListener('click', () => this.testFailover());
-        }
+        // Simple source health monitoring - no complex failover controls needed
     }
 
     // ============================================================================
@@ -222,20 +190,15 @@ class StreamingController {
 
     async updateMediaConnectStatus() {
         try {
-            // Add cache-busting parameter to prevent stale responses
-            const cacheBuster = Date.now();
-
-            // Fetch flow status, input health, and dual source information
-            const [flowResponse, healthResponse, sourcesResponse, failoverResponse] = await Promise.all([
-                fetch(`${this.apiBaseUrl}/mediaconnect/flow/status?t=${cacheBuster}`),
-                fetch(`${this.apiBaseUrl}/mediaconnect/inputs/health?t=${cacheBuster}`),
-                fetch(`${this.apiBaseUrl}/mediaconnect/sources/health?t=${cacheBuster}`),
-                fetch(`${this.apiBaseUrl}/mediaconnect/failover/status?t=${cacheBuster}`)
+            // Get flow status, source health data, and failover status
+            const [flowResponse, healthResponse, failoverResponse] = await Promise.all([
+                fetch(`${this.apiBaseUrl}/mediaconnect/flow/status`),
+                fetch(`${this.apiBaseUrl}/mediaconnect/sources/health`),
+                fetch(`${this.apiBaseUrl}/mediaconnect/failover/status`)
             ]);
 
             const flowData = await flowResponse.json();
-            const healthData = await healthResponse.json();
-            const sourcesData = sourcesResponse.ok ? await sourcesResponse.json() : null;
+            const healthData = healthResponse.ok ? await healthResponse.json() : null;
             const failoverData = failoverResponse.ok ? await failoverResponse.json() : null;
 
             const statusElement = document.getElementById('mediaconnect-status');
@@ -270,11 +233,20 @@ class StreamingController {
                     }
                 }
 
-                // Update source health details with dual source support
-                this.updateDualSourceHealthDetails(flowData.flow, healthData, sourcesData, failoverData);
+                // Update source health details
+                this.updateSimpleSourceHealthDetails(flowData.flow, healthData);
 
-                // Detect source changes and trigger adaptive polling
-                const sources = sourcesData?.sources_health?.sources || [];
+                // Update failover status
+                if (failoverData && failoverData.status === 'success') {
+                    this.updateFailoverStatus({
+                        enabled: failoverData.failover_enabled,
+                        mode: failoverData.failover_mode,
+                        primary_source: failoverData.primary_source
+                    });
+                }
+
+                // Detect source changes
+                const sources = healthData?.sources_health?.sources || [];
                 this.detectSourceChanges(sources);
             } else {
                 // Error state
@@ -289,6 +261,9 @@ class StreamingController {
 
                 // Hide source health on error
                 this.hideSourceHealthDetails();
+
+                // Set failover status to error state
+                this.updateFailoverStatusError();
             }
         } catch (error) {
             console.error('Error updating MediaConnect status:', error);
@@ -302,6 +277,9 @@ class StreamingController {
                 flowText.textContent = 'Error';
             }
             this.hideSourceHealthDetails();
+
+            // Set failover status to error state
+            this.updateFailoverStatusError();
         }
     }
 
@@ -318,106 +296,7 @@ class StreamingController {
         return stateMap[state] || state;
     }
 
-    // Update source health details in the quick status bar
-    updateSourceHealthDetails(flowData, healthData) {
-        const sourceHealthSection = document.getElementById('source-health-section');
 
-        // Check if we have valid flow data and the flow is active
-        if (!flowData || !['ACTIVE', 'STARTING'].includes(flowData.status)) {
-            this.hideSourceHealthDetails();
-            return;
-        }
-
-        // Show the source health section
-        if (sourceHealthSection) {
-            sourceHealthSection.style.display = 'flex';
-        }
-
-        // Get sources from flow data
-        const sources = flowData.sources || [];
-        const failover = flowData.failover || { enabled: false };
-
-        // Update primary source
-        this.updateSourceDisplay('primary', sources[0], healthData);
-
-        // Update secondary source (for failover)
-        if (sources.length > 1 || failover.enabled) {
-            this.updateSourceDisplay('secondary', sources[1], healthData);
-            const secondarySource = document.getElementById('secondary-source');
-            if (secondarySource) {
-                secondarySource.style.display = 'flex';
-            }
-        } else {
-            const secondarySource = document.getElementById('secondary-source');
-            if (secondarySource) {
-                secondarySource.style.display = 'none';
-            }
-        }
-
-        // Update failover status
-        this.updateFailoverStatus(failover);
-    }
-
-    // Update individual source display
-    updateSourceDisplay(sourceType, sourceData, healthData) {
-        const indicator = document.getElementById(`${sourceType}-source-indicator`);
-        const name = document.getElementById(`${sourceType}-source-name`);
-        const bandwidth = document.getElementById(`${sourceType}-source-bandwidth`);
-        const protocol = document.getElementById(`${sourceType}-source-protocol`);
-
-        if (!sourceData) {
-            // No source data - show as disconnected
-            if (indicator) indicator.textContent = '🔴';
-            if (name) name.textContent = sourceType === 'primary' ? 'Source 1' : 'Source 2';
-            if (bandwidth) bandwidth.textContent = '0 Mbps';
-            if (protocol) protocol.textContent = 'N/A';
-            return;
-        }
-
-        // Update source status indicator
-        const isConnected = sourceData.status === 'connected' || sourceData.ingestIp;
-        if (indicator) {
-            indicator.textContent = isConnected ? '🟢' : '🔴';
-        }
-
-        // Update source name
-        if (name) {
-            name.textContent = sourceData.name || (sourceType === 'primary' ? 'Source 1' : 'Source 2');
-        }
-
-        // Update protocol
-        if (protocol) {
-            protocol.textContent = sourceData.protocol || 'SRT';
-        }
-
-        // Update bandwidth from health data
-        if (bandwidth) {
-            let bandwidthText = '0 Mbps';
-
-            if (healthData && healthData.status === 'success' && healthData.input_health) {
-                const healthSources = healthData.input_health.sources || [];
-                const matchingHealthSource = healthSources.find(hs =>
-                    hs.name === sourceData.name ||
-                    hs.ingest_ip === sourceData.ingestIp
-                );
-
-                if (matchingHealthSource && matchingHealthSource.bandwidth) {
-                    const mbps = matchingHealthSource.bandwidth.current_mbps || 0;
-                    if (mbps > 0) {
-                        bandwidthText = `${mbps.toFixed(1)} Mbps`;
-                    }
-                }
-            }
-
-            // Fallback: simulate bandwidth for connected sources (3-4 Mbps range as mentioned)
-            if (isConnected && bandwidthText === '0 Mbps') {
-                const simulatedBandwidth = 3.2 + Math.random() * 0.8; // 3.2-4.0 Mbps
-                bandwidthText = `${simulatedBandwidth.toFixed(1)} Mbps`;
-            }
-
-            bandwidth.textContent = bandwidthText;
-        }
-    }
 
     // Update failover status display
     updateFailoverStatus(failover) {
@@ -426,11 +305,25 @@ class StreamingController {
         if (!failoverState) return;
 
         if (failover.enabled) {
-            failoverState.textContent = `${failover.mode || 'Enabled'} (${failover.state || 'Ready'})`;
+            // Show "Enabled (FAILOVER)" or just "Enabled" if mode is not available
+            const modeText = failover.mode && failover.mode !== 'DISABLED' ? ` (${failover.mode})` : '';
+            failoverState.textContent = `Enabled${modeText}`;
             failoverState.className = 'failover-state enabled';
+            failoverState.style.color = '#28a745'; // Green for enabled
         } else {
             failoverState.textContent = 'Disabled';
             failoverState.className = 'failover-state disabled';
+            failoverState.style.color = '#6c757d'; // Gray for disabled
+        }
+    }
+
+    // Update failover status to error state
+    updateFailoverStatusError() {
+        const failoverState = document.getElementById('failover-state');
+        if (failoverState) {
+            failoverState.textContent = 'Error';
+            failoverState.className = 'failover-state error';
+            failoverState.style.color = '#dc3545'; // Red for error
         }
     }
 
@@ -446,268 +339,65 @@ class StreamingController {
     // DUAL SOURCE MANAGEMENT METHODS
     // ============================================================================
 
-    // Update dual source health details in the quick status bar
-    updateDualSourceHealthDetails(flowData, healthData, sourcesData, failoverData) {
+    // Simple source health display - only shows if sources have data flowing
+    updateSimpleSourceHealthDetails(flowData, healthData) {
         const sourceHealthSection = document.getElementById('source-health-section');
 
-        // Check if we have valid flow data and the flow is active
-        if (!flowData || !['ACTIVE', 'STARTING'].includes(flowData.status)) {
-            this.hideSourceHealthDetails();
-            return;
-        }
-
-        // Show the source health section
+        // Always show the section if we have source data
         if (sourceHealthSection) {
             sourceHealthSection.style.display = 'flex';
         }
 
-        // Update sources information
-        const sources = sourcesData?.sources_health?.sources || healthData?.input_health?.sources || [];
+        // Get sources from health data
+        const sources = healthData?.sources_health?.sources || [];
 
-        // Update primary source
-        this.updateSourceDisplay('primary', sources[0], failoverData);
+        // Update each source display
+        sources.forEach((source, index) => {
+            const sourceType = index === 0 ? 'primary' : 'secondary';
+            this.updateSimpleSourceDisplay(sourceType, source);
+        });
 
-        // Update secondary source if it exists
-        const secondarySource = sources[1];
+        // Hide secondary source if we only have one source
         const secondaryElement = document.getElementById('secondary-source');
-
-        if (secondarySource && secondaryElement) {
-            secondaryElement.style.display = 'block';
-            this.updateSourceDisplay('secondary', secondarySource, failoverData);
-        } else if (secondaryElement) {
-            secondaryElement.style.display = 'none';
+        if (secondaryElement) {
+            secondaryElement.style.display = sources.length > 1 ? 'block' : 'none';
         }
-
-        // Update failover status
-        this.updateFailoverStatus(failoverData);
-
-        // Update failover controls visibility
-        this.updateFailoverControls(sources.length, failoverData);
     }
 
-    updateSourceDisplay(sourceType, sourceData, failoverData) {
+    // Simple source display - just shows connection status and basic info
+    updateSimpleSourceDisplay(sourceType, sourceData) {
         if (!sourceData) return;
 
-        const sourceItem = document.getElementById(`${sourceType}-source`);
         const indicator = document.getElementById(`${sourceType}-source-indicator`);
         const name = document.getElementById(`${sourceType}-source-name`);
         const bandwidth = document.getElementById(`${sourceType}-source-bandwidth`);
         const protocol = document.getElementById(`${sourceType}-source-protocol`);
-        const statusText = document.getElementById(`${sourceType}-source-status`);
 
-        // Update connection status styling
-        if (sourceItem) {
-            if (sourceData.status === 'connected') {
-                sourceItem.classList.add('connected');
-            } else {
-                sourceItem.classList.remove('connected');
-            }
-        }
-
+        // Update connection indicator
         if (indicator) {
-            // Update indicator based on connection status
             indicator.textContent = sourceData.status === 'connected' ? '🟢' : '🔴';
         }
 
-        if (statusText) {
-            // Update status text
-            statusText.textContent = sourceData.status === 'connected' ? 'Connected' : 'Disconnected';
-        }
-
+        // Update source name
         if (name) {
-            let displayName = sourceData.name || `${sourceType.charAt(0).toUpperCase() + sourceType.slice(1)}`;
-
-            // Add primary/backup indicator
-            if (failoverData && failoverData.sources) {
-                const sourceInfo = failoverData.sources.find(s => s.name === sourceData.name);
-                if (sourceInfo && sourceInfo.is_primary) {
-                    displayName += ' (Primary)';
-                } else if (sourceInfo && !sourceInfo.is_primary) {
-                    displayName += ' (Backup)';
-                }
-            }
-
-            name.textContent = displayName;
+            name.textContent = sourceData.name || `Source ${sourceType === 'primary' ? '1' : '2'}`;
         }
 
+        // Update connection info
         if (bandwidth) {
-            // Show connection info - IP and port
             const ipInfo = sourceData.ingest_ip ? `${sourceData.ingest_ip}:${sourceData.ingest_port || ''}` : '---';
             bandwidth.textContent = ipInfo;
         }
 
+        // Update protocol
         if (protocol) {
             protocol.textContent = sourceData.protocol || 'SRT';
         }
     }
 
-    updateFailoverStatus(failoverData) {
-        const failoverState = document.getElementById('failover-state');
 
-        if (failoverState && failoverData) {
-            const isEnabled = failoverData.failover_enabled;
-            const mode = failoverData.failover_mode || 'FAILOVER';
 
-            if (isEnabled) {
-                failoverState.textContent = `Enabled (${mode})`;
-                failoverState.setAttribute('data-state', 'enabled');
-            } else {
-                failoverState.textContent = 'Disabled';
-                failoverState.setAttribute('data-state', 'disabled');
-            }
-        }
-    }
-
-    updateFailoverControls(sourceCount, failoverData) {
-        const failoverControls = document.getElementById('failover-controls');
-        const addBackupBtn = document.getElementById('add-backup-btn');
-        const enableFailoverBtn = document.getElementById('enable-failover-btn');
-        const testFailoverBtn = document.getElementById('test-failover-btn');
-
-        if (!failoverControls) return;
-
-        // Show controls if we have at least one source
-        if (sourceCount > 0) {
-            failoverControls.style.display = 'flex';
-
-            // Show/hide add backup button
-            if (addBackupBtn) {
-                addBackupBtn.style.display = sourceCount < 2 ? 'inline-block' : 'none';
-            }
-
-            // Update enable/disable failover button
-            if (enableFailoverBtn && failoverData) {
-                const isEnabled = failoverData.failover_enabled;
-                enableFailoverBtn.textContent = isEnabled ? '🔄 Disable Failover' : '🔄 Enable Failover';
-                enableFailoverBtn.disabled = sourceCount < 2;
-            }
-
-            // Show test failover button only if failover is enabled and we have 2 sources
-            if (testFailoverBtn && failoverData) {
-                const canTest = failoverData.failover_enabled && sourceCount >= 2;
-                testFailoverBtn.style.display = canTest ? 'inline-block' : 'none';
-            }
-        } else {
-            failoverControls.style.display = 'none';
-        }
-    }
-
-    async addBackupSource() {
-        try {
-            const addBackupBtn = document.getElementById('add-backup-btn');
-            if (addBackupBtn) {
-                addBackupBtn.disabled = true;
-                addBackupBtn.textContent = '⏳ Adding...';
-            }
-
-            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/sources/add-backup`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    name: 'Backup-SRT-Source',
-                    ingestPort: 9999,
-                    whitelistCidr: '0.0.0.0/0',
-                    description: 'Backup SRT source for failover redundancy'
-                })
-            });
-
-            const data = await response.json();
-
-            if (data.status === 'success') {
-                console.log('Backup source added successfully');
-                await this.updateMediaConnectStatus();
-                this.showNotification('Backup source added successfully', 'success');
-            } else {
-                throw new Error(data.message || 'Failed to add backup source');
-            }
-        } catch (error) {
-            console.error('Error adding backup source:', error);
-            this.showNotification(`Failed to add backup source: ${error.message}`, 'error');
-        } finally {
-            const addBackupBtn = document.getElementById('add-backup-btn');
-            if (addBackupBtn) {
-                addBackupBtn.disabled = false;
-                addBackupBtn.textContent = '➕ Add Backup';
-            }
-        }
-    }
-
-    async toggleFailover() {
-        try {
-            const enableFailoverBtn = document.getElementById('enable-failover-btn');
-            if (enableFailoverBtn) {
-                enableFailoverBtn.disabled = true;
-                enableFailoverBtn.textContent = '⏳ Updating...';
-            }
-
-            // Get current failover status
-            const statusResponse = await fetch(`${this.apiBaseUrl}/mediaconnect/failover/status`);
-            const statusData = await statusResponse.json();
-
-            const currentlyEnabled = statusData.failover_enabled;
-
-            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/failover/configure`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    enabled: !currentlyEnabled
-                })
-            });
-
-            const data = await response.json();
-
-            if (data.status === 'success') {
-                const action = currentlyEnabled ? 'disabled' : 'enabled';
-                console.log(`Failover ${action} successfully`);
-                await this.updateMediaConnectStatus();
-                this.showNotification(`Failover ${action} successfully`, 'success');
-            } else {
-                throw new Error(data.message || 'Failed to toggle failover');
-            }
-        } catch (error) {
-            console.error('Error toggling failover:', error);
-            this.showNotification(`Failed to toggle failover: ${error.message}`, 'error');
-        } finally {
-            const enableFailoverBtn = document.getElementById('enable-failover-btn');
-            if (enableFailoverBtn) {
-                enableFailoverBtn.disabled = false;
-                // Text will be updated by updateMediaConnectStatus
-            }
-        }
-    }
-
-    async testFailover() {
-        try {
-            const testFailoverBtn = document.getElementById('test-failover-btn');
-            if (testFailoverBtn) {
-                testFailoverBtn.disabled = true;
-                testFailoverBtn.textContent = '⏳ Testing...';
-            }
-
-            // For now, this is a placeholder - actual failover testing would require
-            // more complex logic to temporarily switch sources
-            this.showNotification('Failover test initiated - check source indicators for changes', 'info');
-
-            // Refresh status after a short delay
-            setTimeout(() => {
-                this.updateMediaConnectStatus();
-            }, 2000);
-
-        } catch (error) {
-            console.error('Error testing failover:', error);
-            this.showNotification(`Failed to test failover: ${error.message}`, 'error');
-        } finally {
-            const testFailoverBtn = document.getElementById('test-failover-btn');
-            if (testFailoverBtn) {
-                testFailoverBtn.disabled = false;
-                testFailoverBtn.textContent = '🧪 Test Failover';
-            }
-        }
-    }
+    // Simple source health monitoring - complex failover methods removed for clarity
 
     showNotification(message, type = 'info') {
         // Simple notification system - could be enhanced with a proper notification component
@@ -751,7 +441,6 @@ class StreamingController {
             const data = await response.json();
 
             if (data.status === 'success') {
-                console.log('MediaConnect flow started successfully');
                 await this.updateMediaConnectStatus();
             } else {
                 throw new Error(data.message || 'Failed to start MediaConnect flow');
@@ -782,7 +471,6 @@ class StreamingController {
             const data = await response.json();
 
             if (data.status === 'success') {
-                console.log('MediaConnect flow stopped successfully');
                 await this.updateMediaConnectStatus();
             } else {
                 throw new Error(data.message || 'Failed to stop MediaConnect flow');
@@ -812,8 +500,6 @@ class StreamingController {
         
         // Update stats display
         this.updateSessionStats();
-        
-        console.log('Streaming session started');
     }
 
     endSession() {
@@ -831,8 +517,6 @@ class StreamingController {
         if (livePanel) {
             livePanel.classList.add('hidden');
         }
-        
-        console.log('Streaming session ended');
     }
 
     updateSessionStats() {
@@ -848,15 +532,13 @@ class StreamingController {
     // ============================================================================
 
     async refreshAll() {
-        console.log('Refreshing all data...');
-        
         // Show loading state
         const refreshBtn = document.getElementById('refresh-btn');
         if (refreshBtn) {
             refreshBtn.textContent = '⏳';
             refreshBtn.disabled = true;
         }
-        
+
         try {
             await Promise.all([
                 this.updateConnectionStatus(),
@@ -864,8 +546,6 @@ class StreamingController {
                 window.multiDestination?.loadDestinations(),
                 window.multiDestination?.loadStreamingStatus()
             ]);
-            
-            console.log('Refresh completed');
         } catch (error) {
             console.error('Error during refresh:', error);
         } finally {
@@ -883,66 +563,17 @@ class StreamingController {
     }
 
     startAutoRefresh() {
-        // Start with normal polling interval
-        this.setPollingMode('normal');
-    }
-
-    setPollingMode(mode) {
-        // Clear existing interval
+        // Simple consistent polling with high-resolution CloudWatch backend
         if (this.refreshInterval) {
             clearInterval(this.refreshInterval);
         }
 
-        // Clear existing timeouts
-        if (this.burstModeTimeout) {
-            clearTimeout(this.burstModeTimeout);
-            this.burstModeTimeout = null;
-        }
-        if (this.fastModeTimeout) {
-            clearTimeout(this.fastModeTimeout);
-            this.fastModeTimeout = null;
-        }
-        if (this.realtimeModeTimeout) {
-            clearTimeout(this.realtimeModeTimeout);
-            this.realtimeModeTimeout = null;
-        }
-        if (this.aggressiveModeTimeout) {
-            clearTimeout(this.aggressiveModeTimeout);
-            this.aggressiveModeTimeout = null;
-        }
-
-        this.currentPollingMode = mode;
-        const interval = this.pollingConfig[mode];
-
-        console.log(`🔄 Switching to ${mode} polling mode (${interval}ms interval)`);
-
-        // Set new interval with standard polling for all modes
         this.refreshInterval = setInterval(() => {
             this.updateConnectionStatus();
             this.updateQuickStatus();
-        }, interval);
+        }, this.pollingInterval);
 
-        // Simplified mode transitions for stability
-        if (mode === 'burst') {
-            this.burstModeTimeout = setTimeout(() => {
-                console.log('⬇️ Burst mode timeout, switching to aggressive mode');
-                this.setPollingMode('aggressive');
-            }, this.pollingConfig.burstDuration);
-        }
-
-        if (mode === 'aggressive') {
-            this.aggressiveModeTimeout = setTimeout(() => {
-                console.log('⬇️ Aggressive mode timeout, switching to fast mode');
-                this.setPollingMode('fast');
-            }, this.pollingConfig.aggressiveDuration);
-        }
-
-        if (mode === 'fast') {
-            this.fastModeTimeout = setTimeout(() => {
-                console.log('⬇️ Fast mode timeout, switching to normal mode');
-                this.setPollingMode('normal');
-            }, this.pollingConfig.fastDuration);
-        }
+        console.log(`🔄 Started auto-refresh with ${this.pollingInterval/1000}s interval`);
     }
 
     detectSourceChanges(sources) {
@@ -957,8 +588,7 @@ class StreamingController {
             const currentStatus = source.status;
             const previousStatus = this.lastSourceStates.get(sourceId);
 
-            if (previousStatus && previousStatus !== currentStatus) {
-                console.log(`🚨 Source change detected: ${source.name} ${previousStatus} → ${currentStatus}`);
+            if (previousStatus !== undefined && previousStatus !== currentStatus) {
                 hasChanges = true;
 
                 // Show notification for source changes
@@ -976,53 +606,17 @@ class StreamingController {
             this.lastChangeTime = Date.now();
         }
 
-        // Trigger burst mode on source changes
+        // Log source changes - no need to change polling with high-resolution CloudWatch
         if (hasChanges) {
-            console.log('🚀 Source changes detected, activating burst mode for faster updates');
-            this.setPollingMode('burst');
-        } else if (this.currentPollingMode === 'normal') {
-            // Periodically switch to aggressive mode to catch missed changes
-            const timeSinceLastChange = Date.now() - (this.lastChangeTime || 0);
-            if (timeSinceLastChange > 120000) { // 2 minutes since last change
-                console.log('🔍 No recent changes detected, switching to aggressive mode for monitoring');
-                this.setPollingMode('aggressive');
-            }
+            console.log('🚀 Source change detected - high-resolution CloudWatch provides real-time updates');
         }
 
         return hasChanges;
     }
 
-    async checkCacheTimestamp() {
-        try {
-            // Add cache-busting parameter to prevent stale responses
-            const cacheBuster = Date.now();
-            const response = await fetch(`${this.apiBaseUrl}/mediaconnect/sources/health/timestamp?t=${cacheBuster}`);
-            const data = await response.json();
 
-            if (data.status === 'success' && data.cache_available) {
-                const currentTimestamp = data.last_updated;
-
-                if (this.lastCacheTimestamp && currentTimestamp !== this.lastCacheTimestamp) {
-                    console.log(`🔄 Cache timestamp changed: ${this.lastCacheTimestamp} → ${currentTimestamp}`);
-                    this.lastCacheTimestamp = currentTimestamp;
-                    return true; // Cache has been updated
-                }
-
-                if (!this.lastCacheTimestamp) {
-                    this.lastCacheTimestamp = currentTimestamp;
-                }
-            }
-
-            return false; // No cache changes
-        } catch (error) {
-            console.error('Error checking cache timestamp:', error);
-            return false;
-        }
-    }
 
     forceRefresh() {
-        console.log('🔄 Manual refresh triggered - switching to burst mode');
-
         // Show visual feedback
         const refreshBtn = document.getElementById('manual-refresh-btn');
         if (refreshBtn) {
@@ -1034,8 +628,7 @@ class StreamingController {
             }, 500);
         }
 
-        // Force burst mode for faster detection
-        this.setPollingMode('burst');
+        // High-resolution CloudWatch provides consistent real-time detection
 
         // Immediately trigger an update
         this.updateConnectionStatus();
