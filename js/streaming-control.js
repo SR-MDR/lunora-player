@@ -411,7 +411,7 @@ class StreamingController {
         // Update bitrate display
         if (bitrate) {
             const bitrateValue = sourceData.bitrate_mbps || 0;
-            bitrate.textContent = `${bitrateValue.toFixed(1)} Mbps`;
+            bitrate.textContent = `Source Bandwidth: ${bitrateValue.toFixed(2)} Mbps`;
 
             // Color coding based on bitrate
             if (bitrateValue > 0) {

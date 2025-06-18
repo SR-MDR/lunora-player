@@ -959,12 +959,13 @@ body {
 
 .source-details {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     font-size: 12px; /* Increased from 10px */
     color: #000000; /* Black text */
     margin-top: 4px; /* Add margin to prevent overlap */
-    min-height: 24px; /* Ensure minimum height for content */
+    min-height: 40px; /* Increased to accommodate two lines */
+    gap: 2px; /* Small gap between elements */
 }
 
 .source-endpoint {
@@ -985,6 +986,8 @@ body {
     min-width: 110px; /* Reduced minimum width for more compact display */
     justify-content: flex-end; /* Align to right side */
     text-align: right; /* Ensure text is right-aligned */
+    align-self: flex-end; /* Align to right side of container */
+    margin-top: 4px; /* Add some space from bitrate */
 }
 
 .source-indicator {
@@ -1005,12 +1008,14 @@ body {
 }
 
 .source-bitrate {
-    font-weight: 600;
+    font-weight: 500;
     color: #007bff; /* Blue color for bitrate */
-    font-size: 12px;
+    font-size: 11px;
     font-family: 'Courier New', monospace;
-    margin-top: 2px;
+    margin-top: 4px;
     display: block;
+    width: 100%;
+    text-align: left;
 }
 
 .failover-status {
