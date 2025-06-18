@@ -372,10 +372,28 @@ class StreamingController {
         const name = document.getElementById(`${sourceType}-source-name`);
         const bandwidth = document.getElementById(`${sourceType}-source-bandwidth`);
         const protocol = document.getElementById(`${sourceType}-source-protocol`);
+        const statusText = document.getElementById(`${sourceType}-source-status`);
+        const sourceItem = document.getElementById(`${sourceType}-source`);
+
+        const isConnected = sourceData.status === 'connected';
 
         // Update connection indicator
         if (indicator) {
-            indicator.textContent = sourceData.status === 'connected' ? '🟢' : '🔴';
+            indicator.textContent = isConnected ? '🟢' : '🔴';
+        }
+
+        // Update status text
+        if (statusText) {
+            statusText.textContent = isConnected ? 'Connected' : 'Disconnected';
+        }
+
+        // Update source item CSS class for border styling
+        if (sourceItem) {
+            if (isConnected) {
+                sourceItem.classList.add('connected');
+            } else {
+                sourceItem.classList.remove('connected');
+            }
         }
 
         // Update source name
