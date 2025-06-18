@@ -72,6 +72,9 @@ tmp/
 temp/
 temp-*.json
 *-temp.*
+temp_*.html
+*-Error-*.js
+realtime_*.py
 
 # Build outputs
 dist/
