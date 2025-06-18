@@ -960,12 +960,13 @@ body {
 .source-details {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: flex-start; /* Ensure left alignment */
     font-size: 12px; /* Increased from 10px */
     color: #000000; /* Black text */
     margin-top: 4px; /* Add margin to prevent overlap */
     min-height: 40px; /* Increased to accommodate two lines */
     gap: 2px; /* Small gap between elements */
+    text-align: left; /* Force left alignment for all children */
 }
 
 .source-endpoint {
@@ -974,8 +975,8 @@ body {
     font-size: 12px; /* Increased from 10px */
     font-weight: 500;
     text-align: left; /* Explicitly left-align IP addresses */
-    flex: 1; /* Take available space */
-    margin-right: 8px; /* Add margin to prevent overlap */
+    width: 100%; /* Full width instead of flex */
+    display: block; /* Ensure block display */
 }
 
 .source-status-indicator {
