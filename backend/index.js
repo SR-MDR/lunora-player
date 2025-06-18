@@ -24,13 +24,7 @@ const cloudfront = new CloudFrontClient({ region });
 // Initialize multi-channel manager
 const multiChannelManager = new RobustMultiChannelManager();
 
-// Store for real-time source health updates
-let latestSourceHealth = null;
-let sourceHealthSubscribers = new Set();
-
-// SSE connection management
-let sseConnections = new Map(); // connectionId -> response object
-let connectionCounter = 0;
+// Clean high-resolution CloudWatch source health detection
 
 // Configuration
 const CONFIG = {
@@ -1119,22 +1113,11 @@ const getAllSources = async () => {
 
 const getSourcesHealth = async () => {
     try {
-        // CRITICAL FIX: Clear stale EventBridge cache before fetching fresh data
-        // This prevents old cached data from interfering with fresh CloudWatch data
-        if (latestSourceHealth && latestSourceHealth.last_updated) {
-            const cacheAge = Date.now() - new Date(latestSourceHealth.last_updated).getTime();
-            const maxCacheAge = 60000; // 60 seconds
+        console.log('🔄 Getting source health using high-resolution CloudWatch');
 
-            if (cacheAge > maxCacheAge) {
-                console.log(`Clearing stale EventBridge cache (${cacheAge}ms old)`);
-                latestSourceHealth = null;
-            }
-        }
-
+        // Get simple source health using the robust multi-channel manager
         const result = await multiChannelManager.getAllSources();
-
-        // Handle both success and error cases from getAllSources
-        if (result.status === 'error') {
+        if (result.status !== 'success') {
             return createResponse(200, {
                 status: 'success',
                 timestamp: new Date().toISOString(),
@@ -1142,84 +1125,30 @@ const getSourcesHealth = async () => {
                     sources: [],
                     failover_config: null,
                     overall_status: 'error',
-                    message: result.message,
-                    realtime_data: latestSourceHealth
+                    message: result.message
                 }
             });
         }
 
-        // CRITICAL FIX: Don't override fresh CloudWatch data with stale EventBridge cache
-        // The cache was causing subsequent changes to be missed because stale EventBridge data
-        // was overriding fresh CloudWatch data. EventBridge events aren't being received consistently.
-        let enhancedSources = result.sources || [];
+        // Process sources for health response
+        const sources = result.sources || [];
 
-        // Only use EventBridge cache if it's very recent (within last 30 seconds) and CloudWatch data is older
-        if (latestSourceHealth && latestSourceHealth.last_updated) {
-            const cacheAge = Date.now() - new Date(latestSourceHealth.last_updated).getTime();
-            const maxCacheAge = 30000; // 30 seconds
-
-            if (cacheAge < maxCacheAge) {
-                console.log(`EventBridge cache is fresh (${cacheAge}ms old), considering for enhancement`);
-
-                enhancedSources = enhancedSources.map(source => {
-                    const realtimeData = latestSourceHealth[source.source_arn];
-                    if (realtimeData && realtimeData.timestamp) {
-                        // Only use EventBridge data if it's significantly newer than CloudWatch data
-                        const realtimeTime = new Date(realtimeData.timestamp);
-                        const pollingTime = new Date(result.last_updated || 0);
-                        const timeDiff = realtimeTime.getTime() - pollingTime.getTime();
-
-                        // Only override if EventBridge data is at least 10 seconds newer
-                        if (timeDiff > 10000) {
-                            console.log(`Using EventBridge data for ${source.name}: ${timeDiff}ms newer`);
-                            return {
-                                ...source,
-                                status: realtimeData.status,
-                                status_note: `${realtimeData.status_note || realtimeData.detection_method} (Real-time EventBridge)`,
-                                confidence: realtimeData.confidence,
-                                detection_method: realtimeData.detection_method,
-                                realtime_update: true,
-                                realtime_timestamp: realtimeData.timestamp,
-                                tr101: realtimeData.tr101
-                            };
-                        } else {
-                            console.log(`Using fresh CloudWatch data for ${source.name}: EventBridge not significantly newer`);
-                        }
-                    }
-                    return source;
-                });
-            } else {
-                console.log(`EventBridge cache is stale (${cacheAge}ms old), using fresh CloudWatch data only`);
-            }
-        } else {
-            console.log('No EventBridge cache available, using fresh CloudWatch data only');
-        }
-
-        // Determine overall status based on connected sources
-        const connectedSources = enhancedSources.filter(s => s.status === 'connected').length;
-        const totalSources = enhancedSources.length;
-        let overallStatus = 'healthy';
-
-        if (connectedSources === 0) {
-            overallStatus = 'degraded';
-        } else if (connectedSources < totalSources) {
-            overallStatus = 'partial';
-        }
+        // Determine overall status
+        const connectedSources = sources.filter(s => s.status === 'connected');
+        const overallStatus = connectedSources.length > 0 ? 'healthy' : 'degraded';
 
         return createResponse(200, {
             status: 'success',
             timestamp: new Date().toISOString(),
             sources_health: {
-                sources: enhancedSources,
+                sources: sources,
                 failover_config: result.failover_config,
                 overall_status: overallStatus,
-                connected_sources: connectedSources,
-                total_sources: totalSources,
+                connected_sources: connectedSources.length,
+                total_sources: sources.length,
                 flow_status: result.flow_status,
                 polling_skipped: result.polling_skipped,
-                detection_method: result.detection_method,
-                realtime_data_available: !!latestSourceHealth,
-                realtime_last_updated: latestSourceHealth?.last_updated
+                detection_method: result.detection_method
             }
         });
     } catch (error) {
@@ -1389,11 +1318,7 @@ const getAdminPresets = async () => {
 exports.handler = async (event) => {
     console.log('Event:', JSON.stringify(event, null, 2));
 
-    // Check if this is an EventBridge event
-    if (event.source === 'aws.mediaconnect' || event.eventType === 'mediaconnect-source-health') {
-        console.log('Detected EventBridge event, routing to EventBridge handler');
-        return await handleEventBridgeEvent(event);
-    }
+
 
     // Handle different event structures (direct invocation vs function URL)
     let httpMethod, path, pathParameters, body, headers;
@@ -1528,6 +1453,25 @@ exports.handler = async (event) => {
             return await getSourcesHealth();
         }
 
+        // DEBUG: Raw MediaConnect data endpoint
+        if (path === '/api/mediaconnect/debug/raw' && httpMethod === 'GET') {
+            try {
+                const rawData = await multiChannelManager.getDebugRawData();
+                return createResponse(200, {
+                    status: 'success',
+                    timestamp: new Date().toISOString(),
+                    raw_data: rawData
+                });
+            } catch (error) {
+                console.error('Error getting raw MediaConnect data:', error);
+                return createResponse(500, {
+                    status: 'error',
+                    message: error.message,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        }
+
         if (path === '/api/mediaconnect/sources/add-backup' && httpMethod === 'POST') {
             return await addBackupSource(event);
         }
@@ -1560,20 +1504,7 @@ exports.handler = async (event) => {
             return await getAdminPresets();
         }
 
-        // Real-time SSE endpoint for source health updates
-        if (path === '/api/mediaconnect/sources/health/stream' && httpMethod === 'GET') {
-            return await handleSSEConnection(event);
-        }
 
-        // Quick cache check endpoint for real-time polling optimization
-        if (path === '/api/mediaconnect/sources/health/timestamp' && httpMethod === 'GET') {
-            return createResponse(200, {
-                status: 'success',
-                cache_available: !!latestSourceHealth,
-                last_updated: latestSourceHealth?.last_updated || null,
-                timestamp: new Date().toISOString()
-            });
-        }
 
         // Default response for unmatched routes
         return createResponse(404, {
@@ -1588,167 +1519,4 @@ exports.handler = async (event) => {
     }
 };
 
-// Server-Sent Events handler for real-time source health updates
-const handleSSEConnection = async (event) => {
-    try {
-        const connectionId = ++connectionCounter;
-        console.log(`SSE connection established: ${connectionId}`);
-
-        // SSE response headers
-        const headers = {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Cache-Control'
-        };
-
-        // For Lambda Function URLs, we can't maintain persistent connections
-        // Instead, we'll return the current state and let frontend reconnect
-        const currentData = {
-            connectionId,
-            timestamp: new Date().toISOString(),
-            latestSourceHealth: latestSourceHealth || {},
-            message: 'SSE connection established - use polling with EventBridge cache'
-        };
-
-        // Format as SSE
-        const sseData = `data: ${JSON.stringify(currentData)}\n\n`;
-
-        return {
-            statusCode: 200,
-            headers,
-            body: sseData
-        };
-
-    } catch (error) {
-        console.error('Error handling SSE connection:', error);
-        return {
-            statusCode: 500,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            body: JSON.stringify({
-                status: 'error',
-                message: 'Failed to establish SSE connection',
-                error: error.message
-            })
-        };
-    }
-};
-
-// Broadcast source health updates to all SSE connections
-const broadcastSourceHealthUpdate = (sourceUpdate) => {
-    const message = {
-        type: 'source-health-update',
-        timestamp: new Date().toISOString(),
-        data: sourceUpdate
-    };
-
-    console.log(`Broadcasting source health update to ${sseConnections.size} connections:`, message);
-
-    // Note: In Lambda Function URL environment, we can't maintain persistent connections
-    // This function is prepared for future WebSocket implementation
-    // For now, we rely on the EventBridge cache + optimized polling
-};
-
-// EventBridge handler for real-time MediaConnect source health events
-const handleEventBridgeEvent = async (event) => {
-    try {
-        console.log('EventBridge event received:', JSON.stringify(event, null, 2));
-
-        // Check if this is a MediaConnect source health event
-        if (event.eventType === 'mediaconnect-source-health' ||
-            (event.source === 'aws.mediaconnect' && event['detail-type'] === 'MediaConnect Source Health')) {
-
-            console.log('Processing MediaConnect source health event');
-
-            // Extract source health information
-            const detail = event.detail || {};
-            const resources = event.resources || [];
-            const timestamp = event.time || new Date().toISOString();
-
-            // Find the source ARN from resources
-            const sourceArn = resources.find(arn => arn.includes(':source:'));
-            const flowArn = resources.find(arn => arn.includes(':flow:'));
-
-            if (sourceArn) {
-                // Extract source name from ARN
-                const sourceName = sourceArn.split(':').pop();
-
-                // Determine connection status from event detail
-                const currentState = detail.current?.state || 'unknown';
-                const previousState = detail.previous?.state || 'unknown';
-                const isConnected = currentState === 'CONNECTED' || currentState === 'RECEIVING';
-
-                console.log(`Source health change detected: ${sourceName} ${previousState} → ${currentState}`);
-
-                // Update latest source health cache
-                const sourceHealthUpdate = {
-                    sourceArn,
-                    sourceName,
-                    status: isConnected ? 'connected' : 'disconnected',
-                    state: currentState,
-                    previousState,
-                    timestamp,
-                    confidence: 'high',
-                    detection_method: 'eventbridge_realtime',
-                    tr101: detail.current?.tr101 || null,
-                    unhealthy: detail.unhealthy || false
-                };
-
-                // Store the update
-                latestSourceHealth = {
-                    ...latestSourceHealth,
-                    [sourceArn]: sourceHealthUpdate,
-                    last_updated: timestamp
-                };
-
-                console.log('Source health cache updated:', sourceHealthUpdate);
-
-                // Broadcast to SSE connections
-                broadcastSourceHealthUpdate(sourceHealthUpdate);
-
-                // Notify any subscribers (for future WebSocket/SSE implementation)
-                sourceHealthSubscribers.forEach(subscriber => {
-                    try {
-                        subscriber(sourceHealthUpdate);
-                    } catch (error) {
-                        console.error('Error notifying subscriber:', error);
-                    }
-                });
-
-                return {
-                    statusCode: 200,
-                    body: JSON.stringify({
-                        status: 'success',
-                        message: 'Source health event processed',
-                        sourceUpdate: sourceHealthUpdate
-                    })
-                };
-            }
-        }
-
-        // Handle other event types if needed
-        console.log('Event processed but no action taken');
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                status: 'success',
-                message: 'Event received but no action required'
-            })
-        };
-
-    } catch (error) {
-        console.error('Error processing EventBridge event:', error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({
-                status: 'error',
-                message: 'Failed to process EventBridge event',
-                error: error.message
-            })
-        };
-    }
-};
+// Clean high-resolution CloudWatch implementation - no EventBridge or SSE complexity
