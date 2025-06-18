@@ -371,6 +371,7 @@ class StreamingController {
         const indicator = document.getElementById(`${sourceType}-source-indicator`);
         const name = document.getElementById(`${sourceType}-source-name`);
         const bandwidth = document.getElementById(`${sourceType}-source-bandwidth`);
+        const bitrate = document.getElementById(`${sourceType}-source-bitrate`);
         const protocol = document.getElementById(`${sourceType}-source-protocol`);
         const statusText = document.getElementById(`${sourceType}-source-status`);
         const sourceItem = document.getElementById(`${sourceType}-source`);
@@ -401,10 +402,23 @@ class StreamingController {
             name.textContent = sourceData.name || `Source ${sourceType === 'primary' ? '1' : '2'}`;
         }
 
-        // Update connection info
+        // Update connection info (IP:Port)
         if (bandwidth) {
             const ipInfo = sourceData.ingest_ip ? `${sourceData.ingest_ip}:${sourceData.ingest_port || ''}` : '---';
             bandwidth.textContent = ipInfo;
+        }
+
+        // Update bitrate display
+        if (bitrate) {
+            const bitrateValue = sourceData.bitrate_mbps || 0;
+            bitrate.textContent = `${bitrateValue.toFixed(1)} Mbps`;
+
+            // Color coding based on bitrate
+            if (bitrateValue > 0) {
+                bitrate.style.color = '#007bff'; // Blue for active bitrate
+            } else {
+                bitrate.style.color = '#6c757d'; // Gray for no bitrate
+            }
         }
 
         // Update protocol

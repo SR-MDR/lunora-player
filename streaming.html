@@ -56,7 +56,7 @@
                 <div class="status-item source-health-section" id="source-health-section" style="display: none;">
                     <div class="source-health-header">
                         <span class="status-label">📡 Source Health:</span>
-                        <button class="refresh-btn" id="manual-refresh-btn" onclick="streamingControl.forceRefresh()" title="Force immediate refresh">
+                        <button class="refresh-btn" id="manual-refresh-btn" onclick="streamingController.forceRefresh()" title="Force immediate refresh">
                             🔄
                         </button>
                     </div>
@@ -71,6 +71,7 @@
                             </div>
                             <div class="source-details">
                                 <span class="source-endpoint" id="primary-source-bandwidth">0 Mbps</span>
+                                <span class="source-bitrate" id="primary-source-bitrate">0.0 Mbps</span>
                                 <div class="source-status-indicator">
                                     <span class="source-indicator" id="primary-source-indicator">🔴</span>
                                     <span class="source-status-text" id="primary-source-status">Disconnected</span>
@@ -88,6 +89,7 @@
                             </div>
                             <div class="source-details">
                                 <span class="source-endpoint" id="secondary-source-bandwidth">0 Mbps</span>
+                                <span class="source-bitrate" id="secondary-source-bitrate">0.0 Mbps</span>
                                 <div class="source-status-indicator">
                                     <span class="source-indicator" id="secondary-source-indicator">🔴</span>
                                     <span class="source-status-text" id="secondary-source-status">Disconnected</span>
