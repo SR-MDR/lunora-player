@@ -112,29 +112,32 @@ const getActiveDestinationsCount = async () => {
 };
 
 // Helper function to wait for MediaLive channel to reach a specific state
-const waitForChannelState = async (targetState, timeoutSeconds = 60) => {
+const waitForChannelState = async (targetState, timeoutSeconds = 60, channelId = null) => {
     const startTime = Date.now();
     const timeout = timeoutSeconds * 1000;
+    const targetChannelId = channelId || CONFIG.medialive.channelId;
 
     while (Date.now() - startTime < timeout) {
         try {
-            const channel = await getMediaLiveChannel();
-            console.log(`Current channel state: ${channel.State}, waiting for: ${targetState}`);
+            const channel = await medialive.send(new DescribeChannelCommand({
+                ChannelId: targetChannelId
+            }));
+            console.log(`Channel ${targetChannelId} state: ${channel.State}, waiting for: ${targetState}`);
 
             if (channel.State === targetState) {
-                console.log(`Channel reached target state: ${targetState}`);
+                console.log(`Channel ${targetChannelId} reached target state: ${targetState}`);
                 return channel;
             }
 
             // Wait 5 seconds before checking again
             await new Promise(resolve => setTimeout(resolve, 5000));
         } catch (error) {
-            console.error('Error checking channel state:', error);
+            console.error(`Error checking channel ${targetChannelId} state:`, error);
             throw error;
         }
     }
 
-    throw new Error(`Timeout waiting for channel to reach state: ${targetState}`);
+    throw new Error(`Timeout waiting for channel ${targetChannelId} to reach state: ${targetState}`);
 };
 
 // Get all destinations
@@ -455,12 +458,32 @@ const startDestination = async (destinationId) => {
             });
         }
 
-        // Check if destination is already streaming
-        if (destination.streaming_status === 'streaming') {
-            return createResponse(400, {
-                status: 'error',
-                message: 'Destination is already streaming'
-            });
+        // Check if destination is already streaming by checking AWS directly (Single Source of Truth)
+        let channelId = destination.media_live_channel_id;
+        if (!channelId && destination.media_live_input_id) {
+            // Find channel by input ID if not stored
+            const channels = await medialive.send(new ListChannelsCommand({}));
+            const matchingChannel = channels.Channels.find(ch =>
+                ch.InputAttachments && ch.InputAttachments.some(input =>
+                    input.InputId === destination.media_live_input_id
+                )
+            );
+            if (matchingChannel) {
+                channelId = matchingChannel.Id;
+            }
+        }
+
+        if (channelId) {
+            const channel = await medialive.send(new DescribeChannelCommand({
+                ChannelId: channelId
+            }));
+
+            if (channel.State === 'RUNNING' || channel.State === 'STARTING') {
+                return createResponse(400, {
+                    status: 'error',
+                    message: `Destination is already streaming (MediaLive channel ${channelId} is ${channel.State})`
+                });
+            }
         }
 
         // Handle HLS destinations (no MediaLive integration needed)
@@ -517,24 +540,59 @@ const startRTMPDestination = async (destinationId, destination) => {
             throw new Error('RTMP URL is required for RTMP destinations');
         }
 
-        // Get current MediaLive channel configuration
-        const channel = await getMediaLiveChannel();
-        console.log(`Current channel state: ${channel.State}`);
+        // Get the destination-specific MediaLive channel ID
+        let channelId = destination.media_live_channel_id;
+
+        if (!channelId) {
+            // If no channel ID stored, try to find it by input ID
+            if (destination.media_live_input_id) {
+                const channels = await medialive.send(new ListChannelsCommand({}));
+                const matchingChannel = channels.Channels.find(ch =>
+                    ch.InputAttachments && ch.InputAttachments.some(input =>
+                        input.InputId === destination.media_live_input_id
+                    )
+                );
+
+                if (matchingChannel) {
+                    channelId = matchingChannel.Id;
+                    console.log(`Found channel ID ${channelId} for input ${destination.media_live_input_id}`);
+
+                    // Update destination with channel ID for future use
+                    await dynamodb.send(new UpdateCommand({
+                        TableName: CONFIG.dynamodb.destinationsTable,
+                        Key: { destination_id: destinationId },
+                        UpdateExpression: 'SET media_live_channel_id = :channelId',
+                        ExpressionAttributeValues: {
+                            ':channelId': channelId
+                        }
+                    }));
+                } else {
+                    throw new Error(`No MediaLive channel found for input ${destination.media_live_input_id}`);
+                }
+            } else {
+                throw new Error('No MediaLive channel ID or input ID found for destination');
+            }
+        }
+
+        // Get current MediaLive channel configuration for this specific destination
+        const channel = await medialive.send(new DescribeChannelCommand({
+            ChannelId: channelId
+        }));
+        console.log(`Destination channel ${channelId} state: ${channel.State}`);
 
         // Check if we need to start the channel
-        const activeDestinationsCount = await getActiveDestinationsCount();
-        const shouldStartChannel = channel.State === 'IDLE' && activeDestinationsCount === 0;
+        const shouldStartChannel = channel.State === 'IDLE';
 
-        // Start channel first if needed
+        // Start channel if needed
         if (shouldStartChannel) {
-            console.log('Starting MediaLive channel...');
+            console.log(`Starting destination-specific MediaLive channel ${channelId}...`);
             await medialive.send(new StartChannelCommand({
-                ChannelId: CONFIG.medialive.channelId
+                ChannelId: channelId
             }));
-            console.log('MediaLive channel start initiated');
+            console.log(`MediaLive channel ${channelId} start initiated`);
 
-            // Wait for channel to be running before adding schedule actions
-            await waitForChannelState('RUNNING', 120);
+            // Wait for channel to be running
+            await waitForChannelState('RUNNING', 120, channelId);
         }
 
         // Use MediaLive Schedule Actions to start RTMP output
@@ -685,13 +743,41 @@ const stopRTMPDestination = async (destinationId, destination) => {
     try {
         console.log(`Stopping RTMP destination: ${destination.name} (${destination.platform})`);
 
-        // Get current MediaLive channel configuration
-        const channel = await getMediaLiveChannel();
-        console.log(`Current channel state: ${channel.State}`);
+        // Get the destination-specific MediaLive channel ID
+        let channelId = destination.media_live_channel_id;
 
-        // Check if we should stop the channel (no more active destinations after this one)
-        const activeDestinationsCount = await getActiveDestinationsCount();
-        const shouldStopChannel = (channel.State === 'RUNNING' || channel.State === 'STARTING') && activeDestinationsCount <= 1; // <= 1 because this destination is still marked as streaming
+        if (!channelId) {
+            console.log('No channel ID found for destination, using input ID to find channel');
+            if (destination.media_live_input_id) {
+                const channels = await medialive.send(new ListChannelsCommand({}));
+                const matchingChannel = channels.Channels.find(ch =>
+                    ch.InputAttachments && ch.InputAttachments.some(input =>
+                        input.InputId === destination.media_live_input_id
+                    )
+                );
+
+                if (matchingChannel) {
+                    channelId = matchingChannel.Id;
+                    console.log(`Found channel ID ${channelId} for input ${destination.media_live_input_id}`);
+                } else {
+                    console.log(`No MediaLive channel found for input ${destination.media_live_input_id}`);
+                    channelId = CONFIG.medialive.channelId; // Fallback to default
+                }
+            } else {
+                console.log('No input ID found, using default channel');
+                channelId = CONFIG.medialive.channelId; // Fallback to default
+            }
+        }
+
+        // Get current MediaLive channel configuration for this specific destination
+        const channel = await medialive.send(new DescribeChannelCommand({
+            ChannelId: channelId
+        }));
+        console.log(`Destination channel ${channelId} state: ${channel.State}`);
+
+        // For destination-specific channels, we can stop them directly
+        // For shared channels, we need to check if other destinations are using them
+        const shouldStopChannel = (channel.State === 'RUNNING' || channel.State === 'STARTING');
 
         // For now, just update the database status
         // The actual RTMP output stopping would need to be handled by pre-configured outputs
@@ -712,13 +798,13 @@ const stopRTMPDestination = async (destinationId, destination) => {
 
         await dynamodb.send(new UpdateCommand(updateParams));
 
-        // Only stop the entire channel if no other destinations are active
+        // Stop the destination-specific channel
         if (shouldStopChannel) {
-            console.log('Stopping MediaLive channel (no more active destinations)...');
+            console.log(`Stopping destination-specific MediaLive channel ${channelId}...`);
             await medialive.send(new StopChannelCommand({
-                ChannelId: CONFIG.medialive.channelId
+                ChannelId: channelId
             }));
-            console.log('MediaLive channel stop initiated');
+            console.log(`MediaLive channel ${channelId} stop initiated`);
         }
 
         console.log(`Successfully stopped streaming to ${destination.platform} destination: ${destination.name}`);
